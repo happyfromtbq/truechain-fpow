@@ -389,9 +389,9 @@ type Config struct {
 	PowMode        Mode
 }
 
-// Ethash is a consensus engine based on proot-of-work implementing the ethash
+// Truepow is a consensus engine based on proot-of-work implementing the truechain fpow
 // algorithm.
-type Ethash struct {
+type Truepow struct {
 	config Config
 
 	caches   *lru // In memory caches to avoid regenerating too often
@@ -404,7 +404,7 @@ type Ethash struct {
 	hashrate metrics.Meter // Meter tracking the average hashrate
 
 	// The fields below are hooks for testing
-	shared    *Ethash       // Shared PoW verifier to avoid cache regeneration
+	shared    *Truepow      // Shared PoW verifier to avoid cache regeneration
 	fakeFail  uint64        // Block number which fails PoW check even in fake mode
 	fakeDelay time.Duration // Time delay to sleep for before returning from verify
 
@@ -412,7 +412,7 @@ type Ethash struct {
 }
 
 // New creates a full sized ethash PoW scheme.
-func New(config Config) *Ethash {
+func New(config Config) *Truepow {
 	if config.CachesInMem <= 0 {
 		log.Warn("One ethash cache must always be in memory", "requested", config.CachesInMem)
 		config.CachesInMem = 1
@@ -423,7 +423,7 @@ func New(config Config) *Ethash {
 	if config.DatasetDir != "" && config.DatasetsOnDisk > 0 {
 		log.Info("Disk storage enabled for ethash DAGs", "dir", config.DatasetDir, "count", config.DatasetsOnDisk)
 	}
-	return &Ethash{
+	return &Truepow{
 		config:   config,
 		caches:   newlru("cache", config.CachesInMem, newCache),
 		datasets: newlru("dataset", config.DatasetsInMem, newDataset),
@@ -434,15 +434,15 @@ func New(config Config) *Ethash {
 
 // NewTester creates a small sized ethash PoW scheme useful only for testing
 // purposes.
-func NewTester() *Ethash {
+func NewTester() *Truepow {
 	return New(Config{CachesInMem: 1, PowMode: ModeTest})
 }
 
 // NewFaker creates a ethash consensus engine with a fake PoW scheme that accepts
 // all blocks' seal as valid, though they still have to conform to the Ethereum
 // consensus rules.
-func NewFaker() *Ethash {
-	return &Ethash{
+func NewFaker() *Truepow {
+	return &Truepow{
 		config: Config{
 			PowMode: ModeFake,
 		},
@@ -452,8 +452,8 @@ func NewFaker() *Ethash {
 // NewFakeFailer creates a ethash consensus engine with a fake PoW scheme that
 // accepts all blocks as valid apart from the single one specified, though they
 // still have to conform to the Ethereum consensus rules.
-func NewFakeFailer(fail uint64) *Ethash {
-	return &Ethash{
+func NewFakeFailer(fail uint64) *Truepow {
+	return &Truepow{
 		config: Config{
 			PowMode: ModeFake,
 		},
@@ -464,8 +464,8 @@ func NewFakeFailer(fail uint64) *Ethash {
 // NewFakeDelayer creates a ethash consensus engine with a fake PoW scheme that
 // accepts all blocks as valid, but delays verifications by some time, though
 // they still have to conform to the Ethereum consensus rules.
-func NewFakeDelayer(delay time.Duration) *Ethash {
-	return &Ethash{
+func NewFakeDelayer(delay time.Duration) *Truepow {
+	return &Truepow{
 		config: Config{
 			PowMode: ModeFake,
 		},
@@ -475,8 +475,8 @@ func NewFakeDelayer(delay time.Duration) *Ethash {
 
 // NewFullFaker creates an ethash consensus engine with a full fake scheme that
 // accepts all blocks as valid, without checking any consensus rules whatsoever.
-func NewFullFaker() *Ethash {
-	return &Ethash{
+func NewFullFaker() *Truepow {
+	return &Truepow{
 		config: Config{
 			PowMode: ModeFullFake,
 		},
@@ -485,14 +485,14 @@ func NewFullFaker() *Ethash {
 
 // NewShared creates a full sized ethash PoW shared between all requesters running
 // in the same process.
-func NewShared() *Ethash {
-	return &Ethash{shared: sharedEthash}
+func NewShared() *Truepow {
+	return &Truepow{shared: sharedEthash}
 }
 
 // cache tries to retrieve a verification cache for the specified block number
 // by first checking against a list of in-memory caches, then against caches
 // stored on disk, and finally generating one if none can be found.
-func (ethash *Ethash) cache(block uint64) *cache {
+func (ethash *Truepow) cache(block uint64) *cache {
 	epoch := block / epochLength
 	currentI, futureI := ethash.caches.get(epoch)
 	current := currentI.(*cache)
@@ -511,7 +511,7 @@ func (ethash *Ethash) cache(block uint64) *cache {
 // dataset tries to retrieve a mining dataset for the specified block number
 // by first checking against a list of in-memory datasets, then against DAGs
 // stored on disk, and finally generating one if none can be found.
-func (ethash *Ethash) dataset(block uint64) *dataset {
+func (ethash *Truepow) dataset(block uint64) *dataset {
 	epoch := block / epochLength
 	currentI, futureI := ethash.datasets.get(epoch)
 	current := currentI.(*dataset)
@@ -530,7 +530,7 @@ func (ethash *Ethash) dataset(block uint64) *dataset {
 
 // Threads returns the number of mining threads currently enabled. This doesn't
 // necessarily mean that mining is running!
-func (ethash *Ethash) Threads() int {
+func (ethash *Truepow) Threads() int {
 	ethash.lock.Lock()
 	defer ethash.lock.Unlock()
 
@@ -542,7 +542,7 @@ func (ethash *Ethash) Threads() int {
 // specified, the miner will use all cores of the machine. Setting a thread
 // count below zero is allowed and will cause the miner to idle, without any
 // work being done.
-func (ethash *Ethash) SetThreads(threads int) {
+func (ethash *Truepow) SetThreads(threads int) {
 	ethash.lock.Lock()
 	defer ethash.lock.Unlock()
 
@@ -561,13 +561,13 @@ func (ethash *Ethash) SetThreads(threads int) {
 
 // Hashrate implements PoW, returning the measured rate of the search invocations
 // per second over the last minute.
-func (ethash *Ethash) Hashrate() float64 {
+func (ethash *Truepow) Hashrate() float64 {
 	return ethash.hashrate.Rate1()
 }
 
 // APIs implements consensus.Engine, returning the user facing RPC APIs. Currently
 // that is empty.
-func (ethash *Ethash) APIs(chain consensus.ChainReader) []rpc.API {
+func (ethash *Truepow) APIs(chain consensus.ChainReader) []rpc.API {
 	return nil
 }
 
