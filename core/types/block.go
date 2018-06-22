@@ -74,6 +74,7 @@ type Header struct {
 	FruitsHash   common.Hash `json:"fruitSetHash"     gencodec:"required"`
 	RecordHash   common.Hash
 	RecordNumber *big.Int
+	Fruit		bool
 
 	UncleHash   common.Hash    `json:"sha3Uncles"       gencodec:"required"`
 	Coinbase    common.Address `json:"miner"            gencodec:"required"`
@@ -112,6 +113,9 @@ func (h *Header) Hash() common.Hash {
 func (h *Header) HashNoNonce() common.Hash {
 	return rlpHash([]interface{}{
 		h.ParentHash,
+		h.PointerHash,
+		h.FruitsHash,
+		h.RecordHash,
 		h.UncleHash,
 		h.Coinbase,
 		h.Root,
@@ -314,6 +318,8 @@ func (b *Block) GasUsed() uint64      { return b.header.GasUsed }
 func (b *Block) Difficulty() *big.Int { return new(big.Int).Set(b.header.Difficulty) }
 func (b *Block) Time() *big.Int       { return new(big.Int).Set(b.header.Time) }
 
+func (b *Block) Fruit() bool			{return b.header.Fruit}
+
 func (b *Block) NumberU64() uint64        { return b.header.Number.Uint64() }
 func (b *Block) MixDigest() common.Hash   { return b.header.MixDigest }
 func (b *Block) Nonce() uint64            { return binary.BigEndian.Uint64(b.header.Nonce[:]) }
@@ -363,10 +369,18 @@ func CalcUncleHash(uncles []*Header) common.Hash {
 func (b *Block) WithSeal(header *Header) *Block {
 	cpy := *header
 
-	return &Block{
-		header:       &cpy,
-		transactions: b.transactions,
-		uncles:       b.uncles,
+	if header.Fruit {
+		return &Block{
+			header:       &cpy,
+			transactions: b.transactions,
+			uncles:       b.uncles,
+		}
+	} else {
+		return &Block{
+			header: &cpy,
+			fruits: b.fruits,
+			uncles: b.uncles,
+		}
 	}
 }
 
