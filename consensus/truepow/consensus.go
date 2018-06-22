@@ -40,6 +40,8 @@ var (
 	ByzantiumBlockReward   *big.Int = big.NewInt(3e+18) // Block reward in wei for successfully mining a block upward from Byzantium
 	maxUncles                       = 2                 // Maximum number of uncles allowed in a single block
 	allowedFutureBlockTime          = 15 * time.Second  // Max time from current time allowed for blocks, before they're considered future blocks
+
+	FruitBlockRatio *big.Int = big.NewInt(64) 		// difficulty ratio between fruit and block
 )
 
 // Various error messages to mark blocks invalid. These should be private to
@@ -380,7 +382,7 @@ func calcDifficultyByzantium(time uint64, parent *types.Header) *big.Int {
 // the difficulty that a new block should have when created at time given the
 // parent block's time and difficulty. The calculation uses the Homestead rules.
 func calcDifficultyHomestead(time uint64, parent *types.Header) *big.Int {
-	// https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2.md
+	// https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2.mdy 8g
 	// algorithm:
 	// diff = (parent_diff +
 	//         (parent_diff / 2048 * max(1 - (block_timestamp - parent_timestamp) // 10, -99))
@@ -494,7 +496,14 @@ func (ethash *Truepow) VerifySeal(chain consensus.ChainReader, header *types.Hea
 		return errInvalidMixDigest
 	}
 	target := new(big.Int).Div(maxUint256, header.Difficulty)
-	if new(big.Int).SetBytes(result).Cmp(target) > 0 {
+	fruitDifficulty := new(big.Int).Div(header.Difficulty, FruitBlockRatio)
+	fruitTarget := new(big.Int).Div(maxUint128, fruitDifficulty)
+	if header.Fruit {
+		last := result[16:]
+		if new(big.Int).SetBytes(last).Cmp(fruitTarget) > 0 {
+			return errInvalidPoW
+		}
+	} else if new(big.Int).SetBytes(result).Cmp(target) > 0 {
 		return errInvalidPoW
 	}
 	return nil

@@ -32,16 +32,17 @@ import (
 
 // Seal implements consensus.Engine, attempting to find a nonce that satisfies
 // the block's difficulty requirements.
-func (ethash *Truepow) Seal(chain consensus.ChainReader, block *types.Block, stop <-chan struct{}) (*types.Block, error) {
+func (ethash *Truepow) Seal(chain consensus.ChainReader, block *types.Block, stop <-chan struct{}, send chan *types.Block) {
 	// If we're running a fake PoW, simply return a 0 nonce immediately
 	if ethash.config.PowMode == ModeFake || ethash.config.PowMode == ModeFullFake {
 		header := block.Header()
 		header.Nonce, header.MixDigest = types.BlockNonce{}, common.Hash{}
-		return block.WithSeal(header), nil
+		send <- block.WithSeal(header)
+		//return block.WithSeal(header), nil
 	}
 	// If we're running a shared PoW, delegate sealing to it
 	if ethash.shared != nil {
-		return ethash.shared.Seal(chain, block, stop)
+		ethash.shared.Seal(chain, block, stop, send)
 	}
 	// Create a runner and the multiple search threads it directs
 	abort := make(chan struct{})
@@ -53,7 +54,8 @@ func (ethash *Truepow) Seal(chain consensus.ChainReader, block *types.Block, sto
 		seed, err := crand.Int(crand.Reader, big.NewInt(math.MaxInt64))
 		if err != nil {
 			ethash.lock.Unlock()
-			return nil, err
+			send <- nil
+			//return nil, err
 		}
 		ethash.rand = rand.New(rand.NewSource(seed.Int64()))
 	}
@@ -74,22 +76,37 @@ func (ethash *Truepow) Seal(chain consensus.ChainReader, block *types.Block, sto
 	}
 	// Wait until sealing is terminated or a nonce is found
 	var result *types.Block
-	select {
-	case <-stop:
-		// Outside abort, stop all miner threads
-		close(abort)
-	case result = <-found:
-		// One of the threads found a block, abort all others
-		close(abort)
-	case <-ethash.update:
-		// Thread count was changed on user request, restart
-		close(abort)
-		pend.Wait()
-		return ethash.Seal(chain, block, stop)
+
+	mineloop:
+	for {
+		select {
+		case <-stop:
+			// Outside abort, stop all miner threads
+			close(abort)
+			pend.Wait()
+			break mineloop
+		case result = <-found:
+			// One of the threads found a block or fruit return it
+			send <- result
+			if !result.Fruit() {
+				// stop threads when get a block, wait for outside abort when result is fruit
+				//close(abort)
+				pend.Wait()
+				break mineloop
+			}
+			break
+		case <-ethash.update:
+			// Thread count was changed on user request, restart
+			close(abort)
+			pend.Wait()
+			ethash.Seal(chain, block, stop, send)
+			break mineloop
+		}
 	}
 	// Wait for all miners to terminate and return the block
-	pend.Wait()
-	return result, nil
+
+	//send <- result
+	//return result, nil
 }
 
 // mine is the actual proof-of-work miner that searches for a nonce starting from
@@ -100,6 +117,8 @@ func (ethash *Truepow) mine(block *types.Block, id int, seed uint64, abort chan 
 		header  = block.Header()
 		hash    = header.HashNoNonce().Bytes()
 		target  = new(big.Int).Div(maxUint256, header.Difficulty)
+		fruitDifficulty = new(big.Int).Div(header.Difficulty, FruitBlockRatio)
+		fruitTarget = new(big.Int).Div(maxUint128, fruitDifficulty)
 		number  = header.Number.Uint64()
 		dataset = ethash.dataset(number)
 	)
@@ -133,6 +152,7 @@ search:
 				header = types.CopyHeader(header)
 				header.Nonce = types.EncodeNonce(nonce)
 				header.MixDigest = common.BytesToHash(digest)
+				header.Fruit = false
 
 				// Seal and return a block (if still needed)
 				select {
@@ -142,6 +162,23 @@ search:
 					logger.Trace("Ethash nonce found but discarded", "attempts", nonce-seed, "nonce", nonce)
 				}
 				break search
+			} else {
+				lastResult := result[16:]
+				if new(big.Int).SetBytes(lastResult).Cmp(fruitTarget) <= 0 {
+					// last 128 bit < Dpf, get a fruit
+					header = types.CopyHeader(header)
+					header.Nonce = types.EncodeNonce(nonce)
+					header.MixDigest = common.BytesToHash(digest)
+					header.Fruit = true
+
+					// Seal and return a block (if still needed)
+					select {
+					case found <- block.WithSeal(header):
+						logger.Trace("Fruit nonce found and reported", "attempts", nonce-seed, "nonce", nonce)
+					case <-abort:
+						logger.Trace("Fruit nonce found but discarded", "attempts", nonce-seed, "nonce", nonce)
+					}
+				}
 			}
 			nonce++
 		}
