@@ -38,6 +38,9 @@ import (
 var (
 	FrontierBlockReward    *big.Int = big.NewInt(5e+18) // Block reward in wei for successfully mining a block
 	ByzantiumBlockReward   *big.Int = big.NewInt(3e+18) // Block reward in wei for successfully mining a block upward from Byzantium
+
+	FruitReward				*big.Int = big.NewInt(3.333e+16)
+	BlockReward				*big.Int = big.NewInt(2e+19)
 	maxUncles                       = 2                 // Maximum number of uncles allowed in a single block
 	allowedFutureBlockTime          = 15 * time.Second  // Max time from current time allowed for blocks, before they're considered future blocks
 
@@ -520,15 +523,15 @@ func (ethash *Truepow) Prepare(chain consensus.ChainReader, header *types.Header
 	return nil
 }
 
-// Finalize implements consensus.Engine, accumulating the block and uncle rewards,
+// Finalize implements consensus.Engine, accumulating the block fruit and uncle rewards,
 // setting the final state and assembling the block.
-func (ethash *Truepow) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
+func (ethash *Truepow) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt, fruits []*types.Block) (*types.Block, error) {
 	// Accumulate any block and uncle rewards and commit the final state root
-	accumulateRewards(chain.Config(), state, header, uncles)
+	accumulateRewards(chain.Config(), state, header, uncles, fruits)
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 
 	// Header seems complete, assemble into a block and return
-	return types.NewBlock(header, txs, uncles, receipts), nil
+	return types.NewBlock(header, txs, uncles, receipts, fruits), nil
 }
 
 // Some weird constants to avoid constant memory allocs for them.
@@ -540,15 +543,27 @@ var (
 // AccumulateRewards credits the coinbase of the given block with the mining
 // reward. The total reward consists of the static block reward and rewards for
 // included uncles. The coinbase of each uncle block is also rewarded.
-func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) {
+func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header, fruits []*types.Block) {
 	// Select the correct block reward based on chain progression
-	blockReward := FrontierBlockReward
-	if config.IsByzantium(header.Number) {
-		blockReward = ByzantiumBlockReward
-	}
-	// Accumulate the rewards for the miner and any included uncles
+
+	blockReward := BlockReward
+	// TODO: calculate block reward every 30,000 blocks is halved
+
+	// accumulate the rewards for the miner
 	reward := new(big.Int).Set(blockReward)
+
+	fruitsReward := new(big.Int)
 	r := new(big.Int)
+	for _, fruit := range fruits {
+		r = FruitReward
+		// TODO: calculate fruit reward
+		state.AddBalance(fruit.Coinbase(), r)
+		fruitsReward.Add(fruitsReward, r)
+	}
+
+	fruitsReward.Div(fruitsReward, big10)
+	blockReward.Add(blockReward, fruitsReward)
+
 	for _, uncle := range uncles {
 		r.Add(uncle.Number, big8)
 		r.Sub(r, header.Number)
