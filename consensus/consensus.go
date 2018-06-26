@@ -84,11 +84,11 @@ type Engine interface {
 	// Note: The block header and state database might be updated to reflect any
 	// consensus rules that happen at finalization (e.g. block rewards).
 	Finalize(chain ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction,
-		uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error)
+		uncles []*types.Header, receipts []*types.Receipt, fruits []*types.Block) (*types.Block, error)
 
 	// Seal generates a new block for the given input block with the local miner's
 	// seal place on top.
-	Seal(chain ChainReader, block *types.Block, stop <-chan struct{}) (*types.Block, error)
+	Seal(chain ChainReader, block *types.Block, stop <-chan struct{}, send chan *types.Block) (*types.Block, error)
 
 	// CalcDifficulty is the difficulty adjustment algorithm. It returns the difficulty
 	// that a new block should have.
