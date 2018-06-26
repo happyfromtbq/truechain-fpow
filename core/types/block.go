@@ -201,6 +201,7 @@ type storageblock struct {
 	TD     *big.Int
 }
 
+
 // NewBlock creates a new block. The input data is copied,
 // changes to header and to the field values will not affect the
 // block.
@@ -208,7 +209,7 @@ type storageblock struct {
 // The values of TxHash, UncleHash, ReceiptHash and Bloom in header
 // are ignored and set to values derived from the given txs, uncles
 // and receipts.
-func NewBlock(header *Header, txs []*Transaction, uncles []*Header, receipts []*Receipt) *Block {
+func NewBlock(header *Header, txs []*Transaction, uncles []*Header, receipts []*Receipt, fruits []*Block) *Block {
 	b := &Block{header: CopyHeader(header), td: new(big.Int)}
 
 	// TODO: panic if len(txs) != len(receipts)
@@ -225,6 +226,17 @@ func NewBlock(header *Header, txs []*Transaction, uncles []*Header, receipts []*
 	} else {
 		b.header.ReceiptHash = DeriveSha(Receipts(receipts))
 		b.header.Bloom = CreateBloom(receipts)
+	}
+
+	if len(fruits) == 0 {
+		b.header.FruitsHash = EmptyRootHash
+	}else {
+		// TODO: get fruits hash
+		b.header.FruitsHash = EmptyRootHash
+		b.fruits = make([]*Block, len(fruits))
+		for i := range fruits {
+			b.fruits[i] = copyFruit(fruits[i])
+		}
 	}
 
 	if len(uncles) == 0 {
@@ -265,6 +277,17 @@ func CopyHeader(h *Header) *Header {
 		copy(cpy.Extra, h.Extra)
 	}
 	return &cpy
+}
+
+
+func copyFruit(f *Block) *Block {
+	b := &Block{header: CopyHeader(f.header), td: new(big.Int)}
+
+	if len(f.transactions) > 0 {
+		b.transactions = make(Transactions, len(f.transactions))
+		copy(b.transactions, f.transactions)
+	}
+	return b
 }
 
 // DecodeRLP decodes the Ethereum
