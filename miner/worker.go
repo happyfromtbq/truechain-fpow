@@ -27,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc"
+//	"github.com/ethereum/go-ethereum/consensus/truepow"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -82,10 +83,22 @@ type Work struct {
 	createdAt time.Time
 }
 
+
 type Result struct {
 	Work  *Work
 	Block *types.Block
 }
+
+/*
+//result for fruit and block  Neo 20180624
+type Result struct {
+	Work  *Work
+	Block *types.Block
+	Fruit *types.Block
+}
+*/
+
+
 
 // worker is the main object which takes care of applying messages to the new state
 type worker struct {
@@ -96,6 +109,13 @@ type worker struct {
 
 	// update loop
 	mux          *event.TypeMux
+	// neo add to event record and fruit
+	txsFruit    event.Subscription // for fruit
+	txsRecord   event.Subscription //for record 
+	txsChFruit  chan core.NewTxsFruitEvent
+	txsChRecord chan core.NewTxsRecordEvent
+
+
 	txsCh        chan core.NewTxsEvent
 	txsSub       event.Subscription
 	chainHeadCh  chan core.ChainHeadEvent
@@ -139,6 +159,8 @@ func newWorker(config *params.ChainConfig, engine consensus.Engine, coinbase com
 		eth:            eth,
 		mux:            mux,
 		txsCh:          make(chan core.NewTxsEvent, txChanSize),
+		txsChFruit:		make(chan core.NewTxsFruitEvent, txChanSize),//neo 20180626 for fruit
+		txsChRecord:	make(chan core.NewTxsRecordEvent, txChanSize),//neo 20180626 for record
 		chainHeadCh:    make(chan core.ChainHeadEvent, chainHeadChanSize),
 		chainSideCh:    make(chan core.ChainSideEvent, chainSideChanSize),
 		chainDb:        eth.ChainDb(),
@@ -155,6 +177,11 @@ func newWorker(config *params.ChainConfig, engine consensus.Engine, coinbase com
 	// Subscribe events for blockchain
 	worker.chainHeadSub = eth.BlockChain().SubscribeChainHeadEvent(worker.chainHeadCh)
 	worker.chainSideSub = eth.BlockChain().SubscribeChainSideEvent(worker.chainSideCh)
+
+	// Neo subscribe event for fruit and record
+	worker.txsFruit = eth.TxPool().SubscribeNewTxsEvent(worker.txsCh) // Neo 20180628 we need change the txsCh for fruit and record 
+	worker.txsRecord = eth.TxPool().SubscribeNewTxsEvent(worker.txsCh)
+
 	go worker.update()
 
 	go worker.wait()
@@ -241,10 +268,27 @@ func (self *worker) unregister(agent Agent) {
 	agent.Stop()
 }
 
+
+
+//Neo 20180626 for fruit pool event
+func (self *worker) updateofFruitTx(){
+
+} 
+
+//Neo 20180626 for record pool event
+func (self *worker) updateofRecordTx(){
+	
+} 
+
 func (self *worker) update() {
 	defer self.txsSub.Unsubscribe()
 	defer self.chainHeadSub.Unsubscribe()
 	defer self.chainSideSub.Unsubscribe()
+	
+	// for fruit and record Neo 20180626
+	defer self.txsFruit.Unsubscribe()
+	defer self.txsRecord.Unsubscribe()
+
 
 	for {
 		// A real event arrived, process interesting content
@@ -268,11 +312,14 @@ func (self *worker) update() {
 			// be automatically eliminated.
 			if atomic.LoadInt32(&self.mining) == 0 {
 				self.currentMu.Lock()
+
 				txs := make(map[common.Address]types.Transactions)
+				
 				for _, tx := range ev.Txs {
 					acc, _ := types.Sender(self.current.signer, tx)
 					txs[acc] = append(txs[acc], tx)
 				}
+
 				txset := types.NewTransactionsByPriceAndNonce(self.current.signer, txs)
 				self.current.commitTransactions(self.mux, txset, self.chain, self.coinbase)
 				self.updateSnapshot()
@@ -283,7 +330,25 @@ func (self *worker) update() {
 					self.commitNewWork()
 				}
 			}
-
+		
+		//Neo 20180626 for fruit and record pool 
+		case ev := <-self.txsChFruit:
+			
+			self.updateofFruitTx()		
+			txs := make(map[common.Address]types.Transactions)
+			for _, tx := range ev.Txs {
+				acc, _ := types.Sender(self.current.signer, tx)
+				txs[acc] = append(txs[acc], tx)
+			}
+			return
+		case ev := <-self.txsChRecord:
+			self.updateofRecordTx()
+			txs := make(map[common.Address]types.Transactions)
+			for _, tx := range ev.Txs {
+				acc, _ := types.Sender(self.current.signer, tx)
+				txs[acc] = append(txs[acc], tx)
+			}
+			return
 		// System stopped
 		case <-self.txsSub.Err():
 			return
@@ -295,53 +360,86 @@ func (self *worker) update() {
 	}
 }
 
+func (self *worker) waitfruit() {
+	log.Info("neo get fruit")
+
+	// first check can insit to fruit set
+	/*
+	重复水果检查类似block
+	需要构造 fruit
+	广播
+	被包涵块 放在pool 里面
+	构造fruit 查询 保质期内就放到set里面去
+	*/
+
+	// put it in to fruit set
+
+	// 广播
+
+}
+
 func (self *worker) wait() {
 	for {
 		mustCommitNewWork := true
+
 		for result := range self.recv {
 			atomic.AddInt32(&self.atWork, -1)
 
 			if result == nil {
 				continue
 			}
+
 			block := result.Block
+		
 			work := result.Work
 
-			// Update the block hash in all logs since it is now available and not when the
-			// receipt/log of individual transactions were created.
-			for _, r := range work.receipts {
-				for _, l := range r.Logs {
-					l.BlockHash = block.Hash()
+			//neo 20180624 that for fruit
+			isFruit := block.Fruit() 
+			if isFruit == true{
+
+				self.waitfruit()
+
+			}else{
+				// Update the block hash in all logs since it is now available and not when the
+				// receipt/log of individual transactions were created.
+				for _, r := range work.receipts {
+					for _, l := range r.Logs {
+						l.BlockHash = block.Hash()
+						// neo add fruit 20180624
+						
+					}
 				}
-			}
-			for _, log := range work.state.Logs() {
-				log.BlockHash = block.Hash()
-			}
-			stat, err := self.chain.WriteBlockWithState(block, work.receipts, work.state)
-			if err != nil {
-				log.Error("Failed writing block to chain", "err", err)
-				continue
-			}
-			// check if canon block and write transactions
-			if stat == core.CanonStatTy {
-				// implicit by posting ChainHeadEvent
-				mustCommitNewWork = false
-			}
-			// Broadcast the block and announce chain insertion event
-			self.mux.Post(core.NewMinedBlockEvent{Block: block})
-			var (
-				events []interface{}
-				logs   = work.state.Logs()
-			)
-			events = append(events, core.ChainEvent{Block: block, Hash: block.Hash(), Logs: logs})
-			if stat == core.CanonStatTy {
-				events = append(events, core.ChainHeadEvent{Block: block})
-			}
-			self.chain.PostChainEvents(events, logs)
+				for _, log := range work.state.Logs() {
+					log.BlockHash = block.Hash()
+				}
 
-			// Insert the block into the set of pending ones to wait for confirmations
-			self.unconfirmed.Insert(block.NumberU64(), block.Hash())
 
+				stat, err := self.chain.WriteBlockWithState(block, work.receipts, work.state)
+				if err != nil {
+					log.Error("Failed writing block to chain", "err", err)
+					continue
+				}
+				// check if canon block and write transactions
+				if stat == core.CanonStatTy {
+					// implicit by posting ChainHeadEvent
+					mustCommitNewWork = false
+				}
+				// Broadcast the block and announce chain insertion event
+				self.mux.Post(core.NewMinedBlockEvent{Block: block})
+				var (
+					events []interface{}
+					logs   = work.state.Logs()
+				)
+				events = append(events, core.ChainEvent{Block: block, Hash: block.Hash(), Logs: logs})
+				if stat == core.CanonStatTy {
+					events = append(events, core.ChainHeadEvent{Block: block})
+				}
+				self.chain.PostChainEvents(events, logs)
+
+				// Insert the block into the set of pending ones to wait for confirmations
+				self.unconfirmed.Insert(block.NumberU64(), block.Hash())
+				
+			}	
 			if mustCommitNewWork {
 				self.commitNewWork()
 			}
@@ -361,6 +459,17 @@ func (self *worker) push(work *Work) {
 		}
 	}
 }
+
+// when we creat a new block we sould filling fruit
+func (self *worker) makeFruittoCurrent() {
+	log.Info("neo makeFruittoCurrent 20180625")
+	// frist find the fruit
+	//fruit
+	//self.current.Block. := &fruit 
+	//fruit := append(fruit,self.current.Block.Fruit[])
+	
+}
+
 
 // makeCurrent creates a new environment for the current cycle.
 func (self *worker) makeCurrent(parent *types.Block, header *types.Header) error {
@@ -388,9 +497,15 @@ func (self *worker) makeCurrent(parent *types.Block, header *types.Header) error
 		work.ancestors.Add(ancestor.Hash())
 	}
 
+	//neo 20180625
+	self.makeFruittoCurrent()
+
 	// Keep track of transactions which return errors so they can be removed
 	work.tcount = 0
 	self.current = work
+
+	
+
 	return nil
 }
 
@@ -404,6 +519,7 @@ func (self *worker) commitNewWork() {
 
 	tstart := time.Now()
 	parent := self.chain.CurrentBlock()
+
 
 	tstamp := tstart.Unix()
 	if parent.Time().Cmp(new(big.Int).SetInt64(tstamp)) >= 0 {

@@ -155,8 +155,17 @@ func (a *RemoteAgent) SubmitWork(nonce types.BlockNonce, mixDigest, hash common.
 	}
 	block := work.Block.WithSeal(result)
 
+
+	
+	//neo for result struct add fruit result with to change the fun
+	//fruit :=work.Block.WithSeal(result)
+
 	// Solutions seems to be valid, return to the miner and notify acceptance
+	//a.returnCh <- &Result{work, block}
+
+	//Neo 20180624
 	a.returnCh <- &Result{work, block}
+
 	delete(a.work, hash)
 
 	return true

@@ -100,6 +100,12 @@ out:
 }
 
 func (self *CpuAgent) mine(work *Work, stop <-chan struct{}) {
+	//Neo for test
+	log.Info("start to mine and to be consensus")
+	// the mine with consensus
+
+	// old ethereum code neo 20180624
+	/*
 	if result, err := self.engine.Seal(self.chain, work.Block, stop); result != nil {
 		log.Info("Successfully sealed new block", "number", result.Number(), "hash", result.Hash())
 		self.returnCh <- &Result{work, result}
@@ -109,6 +115,12 @@ func (self *CpuAgent) mine(work *Work, stop <-chan struct{}) {
 		}
 		self.returnCh <- nil
 	}
+	*/
+
+
+	// the new flow for fruit and block 20180624
+	
+
 }
 
 func (self *CpuAgent) GetHashRate() int64 {

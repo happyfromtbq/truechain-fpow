@@ -79,8 +79,8 @@ func TestCacheFileEvict(t *testing.T) {
 }
 
 func verifyTest(wg *sync.WaitGroup, e *Truepow, workerIndex, epochs int) {
-	defer wg.Done()
 
+	defer wg.Done()
 	const wiggle = 4 * epochLength
 	r := rand.New(rand.NewSource(int64(workerIndex)))
 	for epoch := 0; epoch < epochs; epoch++ {
