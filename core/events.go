@@ -25,9 +25,9 @@ import (
 type NewTxsEvent struct{ Txs []*types.Transaction }
 
 // Neo 20180626 for fruit and record
-type NewTxsFruitEvent struct{ Txs []*types.Transaction }
+type NewFruitEvent struct{ Fruits []*types.Block }
 
-type NewTxsRecordEvent struct{ Txs []*types.Transaction }
+type NewRecordEvent struct{ Records []*types.PbftRecord }
 
 
 

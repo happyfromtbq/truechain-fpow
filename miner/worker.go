@@ -84,6 +84,7 @@ type Work struct {
 	header   *types.Header
 	txs      []*types.Transaction
 	receipts []*types.Receipt
+	fruits	 []*types.Block
 
 	createdAt time.Time
 }
@@ -115,11 +116,10 @@ type worker struct {
 	// update loop
 	mux          *event.TypeMux
 	// neo add to event record and fruit
-	txsFruit    event.Subscription // for fruit
-	txsRecord   event.Subscription //for record 
-	txsChFruit  chan core.NewTxsFruitEvent
-	txsChRecord chan core.NewTxsRecordEvent
-
+	fruitSub  event.Subscription // for fruit
+	recordSub event.Subscription //for record
+	fruitCh   chan core.NewFruitEvent
+	recordCh  chan core.NewRecordEvent
 
 	txsCh        chan core.NewTxsEvent
 	txsSub       event.Subscription
@@ -164,8 +164,8 @@ func newWorker(config *params.ChainConfig, engine consensus.Engine, coinbase com
 		eth:            eth,
 		mux:            mux,
 		txsCh:          make(chan core.NewTxsEvent, txChanSize),
-		txsChFruit:		make(chan core.NewTxsFruitEvent, txChanSize),//neo 20180626 for fruit
-		txsChRecord:	make(chan core.NewTxsRecordEvent, txChanSize),//neo 20180626 for record
+		fruitCh:        make(chan core.NewFruitEvent, txChanSize),  //neo 20180626 for fruit
+		recordCh:       make(chan core.NewRecordEvent, txChanSize), //neo 20180626 for record
 		chainHeadCh:    make(chan core.ChainHeadEvent, chainHeadChanSize),
 		chainSideCh:    make(chan core.ChainSideEvent, chainSideChanSize),
 		chainDb:        eth.ChainDb(),
@@ -184,8 +184,8 @@ func newWorker(config *params.ChainConfig, engine consensus.Engine, coinbase com
 	worker.chainSideSub = eth.BlockChain().SubscribeChainSideEvent(worker.chainSideCh)
 
 	// Neo subscribe event for fruit and record
-	worker.txsFruit = eth.TxPool().SubscribeNewTxsEvent(worker.txsCh) // Neo 20180628 we need change the txsCh for fruit and record 
-	worker.txsRecord = eth.TxPool().SubscribeNewTxsEvent(worker.txsCh)
+	worker.fruitSub = eth.TxPool().SubscribeNewTxsEvent(worker.txsCh) // Neo 20180628 we need change the txsCh for fruit and record
+	worker.recordSub = eth.TxPool().SubscribeNewTxsEvent(worker.txsCh)
 
 	go worker.update()
 
@@ -276,13 +276,18 @@ func (self *worker) unregister(agent Agent) {
 
 
 //Neo 20180626 for fruit pool event
+<<<<<<< HEAD
 func (self *worker) updateofFruitTx(){
 	// 解析当前的fruit
 	// 
+=======
+func (self *worker) updateofFruitTx([]*types.Block){
+
+>>>>>>> 47a6c25ea9b05d712edc7659243a73dd21d60cd8
 } 
 
 //Neo 20180626 for record pool event
-func (self *worker) updateofRecordTx(){
+func (self *worker) updateofRecordTx([]*types.PbftRecord){
 	
 } 
 
@@ -292,9 +297,8 @@ func (self *worker) update() {
 	defer self.chainSideSub.Unsubscribe()
 	
 	// for fruit and record Neo 20180626
-	defer self.txsFruit.Unsubscribe()
-	defer self.txsRecord.Unsubscribe()
-
+	defer self.fruitSub.Unsubscribe()
+	defer self.recordSub.Unsubscribe()
 
 	for {
 		// A real event arrived, process interesting content
@@ -338,23 +342,15 @@ func (self *worker) update() {
 			}
 		
 		//Neo 20180626 for fruit and record pool 
-		case ev := <-self.txsChFruit:
+		case ev := <-self.fruitCh:
 			
-			self.updateofFruitTx()		
-			txs := make(map[common.Address]types.Transactions)
-			for _, tx := range ev.Txs {
-				acc, _ := types.Sender(self.current.signer, tx)
-				txs[acc] = append(txs[acc], tx)
-			}
-			return
-		case ev := <-self.txsChRecord:
-			self.updateofRecordTx()
-			txs := make(map[common.Address]types.Transactions)
-			for _, tx := range ev.Txs {
-				acc, _ := types.Sender(self.current.signer, tx)
-				txs[acc] = append(txs[acc], tx)
-			}
-			return
+			self.updateofFruitTx(ev.Fruits)
+			//return
+
+		case ev := <-self.recordCh:
+			self.updateofRecordTx(ev.Records)
+
+			//return
 		// System stopped
 		case <-self.txsSub.Err():
 			return
@@ -619,8 +615,9 @@ func (self *worker) commitNewWork() {
 	for _, hash := range badUncles {
 		delete(self.possibleUncles, hash)
 	}
+	// TODO: get fruits from tx pool
 	// Create the new block to seal with the consensus engine
-	if work.Block, err = self.engine.Finalize(self.chain, header, work.state, work.txs, uncles, work.receipts); err != nil {
+	if work.Block, err = self.engine.Finalize(self.chain, header, work.state, work.txs, uncles, work.receipts, work.fruits); err != nil {
 		log.Error("Failed to finalize block for sealing", "err", err)
 		return
 	}
@@ -658,6 +655,7 @@ func (self *worker) updateSnapshot() {
 		self.current.txs,
 		nil,
 		self.current.receipts,
+<<<<<<< HEAD
 	)*/
 	
 	//NewBlock(header *Header, txs []*Transaction, uncles []*Header, receipts []*Receipt, fruits []*Block)
@@ -668,6 +666,9 @@ func (self *worker) updateSnapshot() {
 		nil,
 		self.current.receipts,
 		nil,
+=======
+		self.current.fruits,
+>>>>>>> 47a6c25ea9b05d712edc7659243a73dd21d60cd8
 	)
 
 

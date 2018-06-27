@@ -23,6 +23,7 @@ import (
 	"os"
 	"sync"
 	"testing"
+
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
@@ -33,7 +34,7 @@ func TestTestMode(t *testing.T) {
 	ethash := NewTester()
 	send := make(chan *types.Block, 10)
 	stop := make(chan struct{})
-	go ethash.Seal(nil, types.NewBlockWithHeader(head), stop, send)
+	go ethash.ConSeal(nil, types.NewBlockWithHeader(head), stop, send)
 
 	for block := range send {
 		if block == nil {

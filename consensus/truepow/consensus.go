@@ -40,7 +40,8 @@ var (
 	ByzantiumBlockReward   *big.Int = big.NewInt(3e+18) // Block reward in wei for successfully mining a block upward from Byzantium
 
 	FruitReward				*big.Int = big.NewInt(3.333e+16)
-	BlockReward				*big.Int = big.NewInt(2e+19)
+	BlockReward				*big.Int = new(big.Int).Mul(big.NewInt(2e+18), big10)
+
 	maxUncles                       = 2                 // Maximum number of uncles allowed in a single block
 	allowedFutureBlockTime          = 15 * time.Second  // Max time from current time allowed for blocks, before they're considered future blocks
 

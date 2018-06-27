@@ -21,6 +21,7 @@ import (
 
 	"sync/atomic"
 
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/log"
 )
@@ -117,8 +118,29 @@ func (self *CpuAgent) mine(work *Work, stop <-chan struct{}) {
 	}
 	*/
 
-
 	// the new flow for fruit and block 20180624
+	send := make(chan *types.Block, 10)
+	abort := make(chan struct{})
+	go self.engine.ConSeal(self.chain, work.Block, abort, send)
+
+	var result *types.Block
+	mineloop:
+	for {
+		select {
+		case <-stop:
+			// Outside abort, stop all miner threads
+			close(abort)
+			break mineloop
+		case result = <-send:
+			// One of the threads found a block or fruit return it
+			self.returnCh <- &Result{work, result}
+			// when get a fruit, to stop or continue
+			if !result.Fruit() {
+				break mineloop
+			}
+			break
+		}
+	}
 	
 
 }
