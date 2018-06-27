@@ -88,7 +88,11 @@ type Engine interface {
 
 	// Seal generates a new block for the given input block with the local miner's
 	// seal place on top.
-	Seal(chain ChainReader, block *types.Block, stop <-chan struct{}, send chan *types.Block) (*types.Block, error)
+	Seal(chain ChainReader, block *types.Block, stop <-chan struct{}) (*types.Block, error)
+
+	// ConSeal generates a new block for the given input block with the local miner's
+	// seal place on top.
+	ConSeal(chain ChainReader, block *types.Block, stop <-chan struct{}, send chan *types.Block)
 
 	// CalcDifficulty is the difficulty adjustment algorithm. It returns the difficulty
 	// that a new block should have.

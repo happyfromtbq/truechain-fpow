@@ -30,9 +30,68 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 )
 
+func (ethash *Truepow) Seal(chain consensus.ChainReader, block *types.Block, stop <-chan struct{}) (*types.Block, error) {
+	if ethash.config.PowMode == ModeFake || ethash.config.PowMode == ModeFullFake {
+		header := block.Header()
+		header.Nonce, header.MixDigest = types.BlockNonce{}, common.Hash{}
+		return block.WithSeal(header), nil
+	}
+	// If we're running a shared PoW, delegate sealing to it
+	if ethash.shared != nil {
+		return ethash.shared.Seal(chain, block, stop)
+	}
+	// Create a runner and the multiple search threads it directs
+	abort := make(chan struct{})
+	found := make(chan *types.Block)
+
+	ethash.lock.Lock()
+	threads := ethash.threads
+	if ethash.rand == nil {
+		seed, err := crand.Int(crand.Reader, big.NewInt(math.MaxInt64))
+		if err != nil {
+			ethash.lock.Unlock()
+			return nil, err
+		}
+		ethash.rand = rand.New(rand.NewSource(seed.Int64()))
+	}
+	ethash.lock.Unlock()
+	if threads == 0 {
+		threads = runtime.NumCPU()
+	}
+	if threads < 0 {
+		threads = 0 // Allows disabling local mining without extra logic around local/remote
+	}
+	var pend sync.WaitGroup
+	for i := 0; i < threads; i++ {
+		pend.Add(1)
+		go func(id int, nonce uint64) {
+			defer pend.Done()
+			ethash.mine(block, id, nonce, abort, found)
+		}(i, uint64(ethash.rand.Int63()))
+	}
+	// Wait until sealing is terminated or a nonce is found
+	var result *types.Block
+	select {
+	case <-stop:
+		// Outside abort, stop all miner threads
+		close(abort)
+	case result = <-found:
+		// One of the threads found a block, abort all others
+		close(abort)
+	case <-ethash.update:
+		// Thread count was changed on user request, restart
+		close(abort)
+		pend.Wait()
+		return ethash.Seal(chain, block, stop)
+	}
+	// Wait for all miners to terminate and return the block
+	pend.Wait()
+	return result, nil
+}
+
 // Seal implements consensus.Engine, attempting to find a nonce that satisfies
 // the block's difficulty requirements.
-func (ethash *Truepow) Seal(chain consensus.ChainReader, block *types.Block, stop <-chan struct{}, send chan *types.Block) {
+func (ethash *Truepow) ConSeal(chain consensus.ChainReader, block *types.Block, stop <-chan struct{}, send chan *types.Block) {
 	// If we're running a fake PoW, simply return a 0 nonce immediately
 	if ethash.config.PowMode == ModeFake || ethash.config.PowMode == ModeFullFake {
 		header := block.Header()
@@ -42,7 +101,7 @@ func (ethash *Truepow) Seal(chain consensus.ChainReader, block *types.Block, sto
 	}
 	// If we're running a shared PoW, delegate sealing to it
 	if ethash.shared != nil {
-		ethash.shared.Seal(chain, block, stop, send)
+		ethash.shared.ConSeal(chain, block, stop, send)
 	}
 	// Create a runner and the multiple search threads it directs
 	abort := make(chan struct{})
@@ -77,7 +136,7 @@ func (ethash *Truepow) Seal(chain consensus.ChainReader, block *types.Block, sto
 	// Wait until sealing is terminated or a nonce is found
 	var result *types.Block
 
-	mineloop:
+mineloop:
 	for {
 		select {
 		case <-stop:
@@ -99,7 +158,7 @@ func (ethash *Truepow) Seal(chain consensus.ChainReader, block *types.Block, sto
 			// Thread count was changed on user request, restart
 			close(abort)
 			pend.Wait()
-			ethash.Seal(chain, block, stop, send)
+			ethash.ConSeal(chain, block, stop, send)
 			break mineloop
 		}
 	}
@@ -114,13 +173,13 @@ func (ethash *Truepow) Seal(chain consensus.ChainReader, block *types.Block, sto
 func (ethash *Truepow) mine(block *types.Block, id int, seed uint64, abort chan struct{}, found chan *types.Block) {
 	// Extract some data from the header
 	var (
-		header  = block.Header()
-		hash    = header.HashNoNonce().Bytes()
-		target  = new(big.Int).Div(maxUint256, header.Difficulty)
+		header          = block.Header()
+		hash            = header.HashNoNonce().Bytes()
+		target          = new(big.Int).Div(maxUint256, header.Difficulty)
 		fruitDifficulty = new(big.Int).Div(header.Difficulty, FruitBlockRatio)
-		fruitTarget = new(big.Int).Div(maxUint128, fruitDifficulty)
-		number  = header.Number.Uint64()
-		dataset = ethash.dataset(number)
+		fruitTarget     = new(big.Int).Div(maxUint128, fruitDifficulty)
+		number          = header.Number.Uint64()
+		dataset         = ethash.dataset(number)
 	)
 	// Start generating random nonces until we abort or find a good one
 	var (
