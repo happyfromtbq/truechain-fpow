@@ -27,7 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc"
-//	"github.com/ethereum/go-ethereum/consensus/truepow"
+	//	"github.com/ethereum/go-ethereum/consensus/truepow"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -51,7 +51,7 @@ const (
 	// chainSideChanSize is the size of channel listening to ChainSideEvent.
 	chainSideChanSize = 10
 
-	// neo 20180627 freshFruit for k is a range of index for 
+	// neo 20180627 freshFruit for k is a range of index for
 	freshFruitK = 8
 )
 
@@ -84,11 +84,10 @@ type Work struct {
 	header   *types.Header
 	txs      []*types.Transaction
 	receipts []*types.Receipt
-	fruits	 []*types.Block
+	fruits   []*types.Block
 
 	createdAt time.Time
 }
-
 
 type Result struct {
 	Work  *Work
@@ -104,8 +103,6 @@ type Result struct {
 }
 */
 
-
-
 // worker is the main object which takes care of applying messages to the new state
 type worker struct {
 	config *params.ChainConfig
@@ -114,7 +111,7 @@ type worker struct {
 	mu sync.Mutex
 
 	// update loop
-	mux          *event.TypeMux
+	mux *event.TypeMux
 	// neo add to event record and fruit
 	fruitSub  event.Subscription // for fruit
 	recordSub event.Subscription //for record
@@ -273,29 +270,21 @@ func (self *worker) unregister(agent Agent) {
 	agent.Stop()
 }
 
-
-
 //Neo 20180626 for fruit pool event
-<<<<<<< HEAD
-func (self *worker) updateofFruitTx(){
-	// 解析当前的fruit
-	// 
-=======
-func (self *worker) updateofFruitTx([]*types.Block){
+func (self *worker) updateofFruitTx([]*types.Block) {
 
->>>>>>> 47a6c25ea9b05d712edc7659243a73dd21d60cd8
-} 
+}
 
 //Neo 20180626 for record pool event
-func (self *worker) updateofRecordTx([]*types.PbftRecord){
-	
-} 
+func (self *worker) updateofRecordTx([]*types.PbftRecord) {
+
+}
 
 func (self *worker) update() {
 	defer self.txsSub.Unsubscribe()
 	defer self.chainHeadSub.Unsubscribe()
 	defer self.chainSideSub.Unsubscribe()
-	
+
 	// for fruit and record Neo 20180626
 	defer self.fruitSub.Unsubscribe()
 	defer self.recordSub.Unsubscribe()
@@ -324,7 +313,7 @@ func (self *worker) update() {
 				self.currentMu.Lock()
 
 				txs := make(map[common.Address]types.Transactions)
-				
+
 				for _, tx := range ev.Txs {
 					acc, _ := types.Sender(self.current.signer, tx)
 					txs[acc] = append(txs[acc], tx)
@@ -340,10 +329,10 @@ func (self *worker) update() {
 					self.commitNewWork()
 				}
 			}
-		
-		//Neo 20180626 for fruit and record pool 
+
+		//Neo 20180626 for fruit and record pool
 		case ev := <-self.fruitCh:
-			
+
 			self.updateofFruitTx(ev.Fruits)
 			//return
 
@@ -367,11 +356,11 @@ func (self *worker) waitfruit() {
 
 	// first check can insit to fruit set
 	/*
-	重复水果检查类似block
-	需要构造 fruit
-	广播
-	被包涵块 放在pool 里面
-	构造fruit 查询 保质期内就放到set里面去
+		重复水果检查类似block
+		需要构造 fruit
+		广播
+		被包涵块 放在pool 里面
+		构造fruit 查询 保质期内就放到set里面去
 	*/
 
 	// put it in to fruit set
@@ -392,29 +381,28 @@ func (self *worker) wait() {
 			}
 
 			block := result.Block
-		
+
 			work := result.Work
 
 			//neo 20180624 that for fruit
-			isFruit := block.Fruit() 
-			if isFruit == true{
+			isFruit := block.Fruit()
+			if isFruit == true {
 
 				self.waitfruit()
 
-			}else{
+			} else {
 				// Update the block hash in all logs since it is now available and not when the
 				// receipt/log of individual transactions were created.
 				for _, r := range work.receipts {
 					for _, l := range r.Logs {
 						l.BlockHash = block.Hash()
 						// neo add fruit 20180624
-						
+
 					}
 				}
 				for _, log := range work.state.Logs() {
 					log.BlockHash = block.Hash()
 				}
-
 
 				stat, err := self.chain.WriteBlockWithState(block, work.receipts, work.state)
 				if err != nil {
@@ -440,8 +428,8 @@ func (self *worker) wait() {
 
 				// Insert the block into the set of pending ones to wait for confirmations
 				self.unconfirmed.Insert(block.NumberU64(), block.Hash())
-				
-			}	
+
+			}
 			if mustCommitNewWork {
 				self.commitNewWork()
 			}
@@ -467,7 +455,7 @@ func (self *worker) makeFruittoCurrent() {
 	log.Info("neo makeFruittoCurrent 20180625")
 	// frist find the fruit
 	//fruit
-	//self.current.Block. := &fruit 
+	//self.current.Block. := &fruit
 	//fruit := append(fruit,self.current.Block.Fruit[])
 
 	//把fruit pool 里面的fruit 放到当前块里面来
@@ -475,14 +463,10 @@ func (self *worker) makeFruittoCurrent() {
 	//for hash, uncle := range self.possibleUncles
 	//FruitSet []*types.Block
 	//for idx,block := range self.current.FruitSet {
-		//if(block)
+	//if(block)
 
-		
-		
-
-	//}	
+	//}
 }
-
 
 // makeCurrent creates a new environment for the current cycle.
 func (self *worker) makeCurrent(parent *types.Block, header *types.Header) error {
@@ -517,8 +501,6 @@ func (self *worker) makeCurrent(parent *types.Block, header *types.Header) error
 	work.tcount = 0
 	self.current = work
 
-	
-
 	return nil
 }
 
@@ -532,7 +514,6 @@ func (self *worker) commitNewWork() {
 
 	tstart := time.Now()
 	parent := self.chain.CurrentBlock()
-
 
 	tstamp := tstart.Unix()
 	if parent.Time().Cmp(new(big.Int).SetInt64(tstamp)) >= 0 {
@@ -649,15 +630,14 @@ func (self *worker) updateSnapshot() {
 	self.snapshotMu.Lock()
 	defer self.snapshotMu.Unlock()
 
-		/*
-	self.snapshotBlock = types.NewBlock(
-		self.current.header,
-		self.current.txs,
-		nil,
-		self.current.receipts,
-<<<<<<< HEAD
-	)*/
-	
+	/*
+		self.snapshotBlock = types.NewBlock(
+			self.current.header,
+			self.current.txs,
+			nil,
+			self.current.receipts,
+		)*/
+
 	//NewBlock(header *Header, txs []*Transaction, uncles []*Header, receipts []*Receipt, fruits []*Block)
 
 	self.snapshotBlock = types.NewBlock(
@@ -665,12 +645,8 @@ func (self *worker) updateSnapshot() {
 		self.current.txs,
 		nil,
 		self.current.receipts,
-		nil,
-=======
 		self.current.fruits,
->>>>>>> 47a6c25ea9b05d712edc7659243a73dd21d60cd8
 	)
-
 
 	self.snapshotState = self.current.state.Copy()
 }

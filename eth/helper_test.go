@@ -128,6 +128,18 @@ func (p *testTxPool) SubscribeNewTxsEvent(ch chan<- core.NewTxsEvent) event.Subs
 	return p.txFeed.Subscribe(ch)
 }
 
+func (p *testTxPool) AddRemoteFruits(fruits []*types.Block) []error       { return nil }
+func (p *testTxPool) PendingFruits() (map[common.Hash]types.Block, error) { return nil, nil }
+func (p *testTxPool) SubscribeNewFruitsEvent(ch chan<- core.NewFruitEvent) event.Subscription {
+	return nil
+}
+
+func (p *testTxPool) AddRemoteRecords(records []*types.PbftRecord) []error { return nil }
+func (p *testTxPool) PendingRecords() (*types.PbftRecord, error)           { return nil, nil }
+func (p *testTxPool) SubscribeNewRecordEvent(ch chan<- core.NewRecordEvent) event.Subscription {
+	return nil
+}
+
 // newTestTransaction create a new dummy transaction.
 func newTestTransaction(from *ecdsa.PrivateKey, nonce uint64, datasize int) *types.Transaction {
 	tx := types.NewTransaction(nonce, common.Address{}, big.NewInt(0), 100000, big.NewInt(0), make([]byte, datasize))

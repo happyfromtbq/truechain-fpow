@@ -673,6 +673,48 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 		pm.txpool.AddRemotes(txs)
 
+	case msg.Code == RecordMsg:
+		// TODO: record msg handle
+		// Record arrived, make sure we have a valid and fresh chain to handle them
+		if atomic.LoadUint32(&pm.acceptTxs) == 0 {
+			break
+		}
+		// Transactions can be processed, parse all of them and deliver to the pool
+		var records []*types.PbftRecord
+		if err := msg.Decode(&records); err != nil {
+			return errResp(ErrDecode, "msg %v: %v", msg, err)
+		}
+		for i, record := range records {
+			// Validate and mark the remote transaction
+			if record == nil {
+				return errResp(ErrDecode, "transaction %d is nil", i)
+			}
+			// TODO: add markrecord
+			//p.MarkTransaction(tx.Hash())
+		}
+		pm.txpool.AddRemoteRecords(records)
+
+	case msg.Code == FruitMsg:
+		// TODO: fruit msg handle
+		// Fruit arrived, make sure we have a valid and fresh chain to handle them
+		if atomic.LoadUint32(&pm.acceptTxs) == 0 {
+			break
+		}
+		// Transactions can be processed, parse all of them and deliver to the pool
+		var fruits []*types.Block
+		if err := msg.Decode(&fruits); err != nil {
+			return errResp(ErrDecode, "msg %v: %v", msg, err)
+		}
+		for i, fruit := range fruits {
+			// Validate and mark the remote transaction
+			if fruit == nil {
+				return errResp(ErrDecode, "fruit %d is nil", i)
+			}
+			// TODO: 
+			p.MarkTransaction(fruit.Hash())
+		}
+		pm.txpool.AddRemoteFruits(fruits)
+
 	default:
 		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
 	}

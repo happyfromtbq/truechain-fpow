@@ -235,7 +235,7 @@ func NewBlock(header *Header, txs []*Transaction, uncles []*Header, receipts []*
 		b.header.FruitsHash = EmptyRootHash
 		b.fruits = make([]*Block, len(fruits))
 		for i := range fruits {
-			b.fruits[i] = copyFruit(fruits[i])
+			b.fruits[i] = CopyFruit(fruits[i])
 		}
 	}
 
@@ -280,7 +280,7 @@ func CopyHeader(h *Header) *Header {
 }
 
 
-func copyFruit(f *Block) *Block {
+func CopyFruit(f *Block) *Block {
 	b := &Block{header: CopyHeader(f.header), td: new(big.Int)}
 
 	if len(f.transactions) > 0 {

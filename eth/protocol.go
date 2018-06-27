@@ -57,6 +57,9 @@ const (
 	BlockBodiesMsg     = 0x06
 	NewBlockMsg        = 0x07
 
+	RecordMsg		   = 0x09
+	FruitMsg		   = 0x0a
+
 	// Protocol messages belonging to eth/63
 	GetNodeDataMsg = 0x0d
 	NodeDataMsg    = 0x0e
@@ -106,6 +109,14 @@ type txPool interface {
 	// SubscribeNewTxsEvent should return an event subscription of
 	// NewTxsEvent and send events to the given channel.
 	SubscribeNewTxsEvent(chan<- core.NewTxsEvent) event.Subscription
+
+	AddRemoteFruits([]*types.Block) []error
+	PendingFruits() (map[common.Hash]types.Block, error)
+	SubscribeNewFruitsEvent(chan<- core.NewFruitEvent) event.Subscription
+
+	AddRemoteRecords([]*types.PbftRecord) []error
+	PendingRecords() (*types.PbftRecord, error)
+	SubscribeNewRecordEvent(chan<- core.NewRecordEvent) event.Subscription
 }
 
 // statusData is the network packet for the status message.

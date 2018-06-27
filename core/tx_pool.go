@@ -206,6 +206,17 @@ type TxPool struct {
 	all     *txLookup                    // All transactions to allow lookups
 	priced  *txPricedList                // All transactions sorted by price
 
+
+	fruitFeed   event.Feed
+	recordFeed	event.Feed
+
+	muFruit		sync.RWMutex
+	muRecord	sync.RWMutex
+
+	fruits map[common.Hash]*types.Block
+	records map[common.Hash]*types.PbftRecord
+	recordList map[uint64]common.Hash
+
 	wg sync.WaitGroup // for shutdown sync
 
 	homestead bool
