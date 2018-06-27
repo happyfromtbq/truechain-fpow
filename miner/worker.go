@@ -50,6 +50,9 @@ const (
 	chainHeadChanSize = 10
 	// chainSideChanSize is the size of channel listening to ChainSideEvent.
 	chainSideChanSize = 10
+
+	// neo 20180627 freshFruit for k is a range of index for 
+	freshFruitK = 8
 )
 
 // Agent can register themself with the worker
@@ -75,6 +78,8 @@ type Work struct {
 	gasPool   *core.GasPool  // available gas used to pack transactions
 
 	Block *types.Block // the new block
+
+	FruitSet []*types.Block //the for fruitset
 
 	header   *types.Header
 	txs      []*types.Transaction
@@ -272,7 +277,8 @@ func (self *worker) unregister(agent Agent) {
 
 //Neo 20180626 for fruit pool event
 func (self *worker) updateofFruitTx(){
-
+	// 解析当前的fruit
+	// 
 } 
 
 //Neo 20180626 for record pool event
@@ -467,7 +473,18 @@ func (self *worker) makeFruittoCurrent() {
 	//fruit
 	//self.current.Block. := &fruit 
 	//fruit := append(fruit,self.current.Block.Fruit[])
-	
+
+	//把fruit pool 里面的fruit 放到当前块里面来
+	//map[common.Hash]*types.Block
+	//for hash, uncle := range self.possibleUncles
+	//FruitSet []*types.Block
+	//for idx,block := range self.current.FruitSet {
+		//if(block)
+
+		
+		
+
+	//}	
 }
 
 
@@ -635,12 +652,25 @@ func (self *worker) updateSnapshot() {
 	self.snapshotMu.Lock()
 	defer self.snapshotMu.Unlock()
 
+		/*
 	self.snapshotBlock = types.NewBlock(
 		self.current.header,
 		self.current.txs,
 		nil,
 		self.current.receipts,
+	)*/
+	
+	//NewBlock(header *Header, txs []*Transaction, uncles []*Header, receipts []*Receipt, fruits []*Block)
+
+	self.snapshotBlock = types.NewBlock(
+		self.current.header,
+		self.current.txs,
+		nil,
+		self.current.receipts,
+		nil,
 	)
+
+
 	self.snapshotState = self.current.state.Copy()
 }
 
