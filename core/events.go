@@ -55,8 +55,16 @@ type ChainEvent struct {
 	Logs  []*types.Log
 }
 
+// neo 20180628 for fruit event
+type FruitEvent struct {
+	Block *types.Block
+	Hash  common.Hash
+	Logs  []*types.Log
+}
+
 type ChainSideEvent struct {
 	Block *types.Block
 }
 
 type ChainHeadEvent struct{ Block *types.Block }
+type FruitFleashEvent struct{ Block *types.Block }

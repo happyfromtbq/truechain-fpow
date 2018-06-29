@@ -84,7 +84,7 @@ type Work struct {
 	header   *types.Header
 	txs      []*types.Transaction
 	receipts []*types.Receipt
-	fruits   []*types.Block
+	fruits	 []*types.Block // for the fresh neo20180627
 
 	createdAt time.Time
 }
@@ -149,6 +149,7 @@ type worker struct {
 
 	unconfirmed *unconfirmedBlocks // set of locally mined blocks pending canonicalness confirmations
 
+	fruitPoolSet []*types.Block //the for  fruitset  pool neo  20180627
 	// atomic status counters
 	mining int32
 	atWork int32
@@ -351,7 +352,7 @@ func (self *worker) update() {
 	}
 }
 
-func (self *worker) waitfruit() {
+func (self *worker) waitfruit(Work *Work) {
 	log.Info("neo get fruit")
 
 	// first check can insit to fruit set
@@ -363,9 +364,35 @@ func (self *worker) waitfruit() {
 		构造fruit 查询 保质期内就放到set里面去
 	*/
 
-	// put it in to fruit set
-
+	// put it in to fruit pool
+	
+	//AppendingFruits
+	//AppendingRecord
 	// 广播
+
+	// Update the block hash in all logs since it is now available and not when the
+				// receipt/log of individual transactions were created.
+				
+							
+				// check if canon block and write transactions
+				/*if stat == core.CanonStatTy {
+					// implicit by posting ChainHeadEvent
+					mustCommitNewWork = false
+				}
+				
+				// Broadcast the block and announce chain insertion event
+				self.mux.Post(core.NewMinedFruitEvent{Block: work})
+				var (
+					events []interface{}
+					logs   = work.state.Logs()
+				)
+				events = append(events, core.FruitEvent{Block: block, Hash: block.Hash(), Logs: logs})
+				if stat == core.CanonStatTy {
+					events = append(events, core.FruitFleashEvent{Block: block})
+				}
+				self.chain.PostChainEvents(events, logs)
+				*/
+
 
 }
 
@@ -388,7 +415,19 @@ func (self *worker) wait() {
 			isFruit := block.Fruit()
 			if isFruit == true {
 
-				self.waitfruit()
+				//neo 20180628
+				// put it into pool first	
+				
+				
+				// Broadcast the block and announce chain insertion event
+				self.mux.Post(core.NewMinedFruitEvent{Block: block})
+				var (
+					events []interface{}
+					logs   = work.state.Logs()
+				)
+				events = append(events, core.FruitEvent{Block: block, Hash: block.Hash(), Logs: logs})
+				
+				//self.chain.PostChainEvents(events, logs)
 
 			} else {
 				// Update the block hash in all logs since it is now available and not when the
@@ -462,8 +501,18 @@ func (self *worker) makeFruittoCurrent() {
 	//map[common.Hash]*types.Block
 	//for hash, uncle := range self.possibleUncles
 	//FruitSet []*types.Block
-	//for idx,block := range self.current.FruitSet {
-	//if(block)
+	//for fruit := range self.current.FruitSet {
+		//判断pool里面的水果是否新鲜 通过index来判断
+		for i :=0; i<len(self.fruitPoolSet);i++ {
+
+			if(self.fruitPoolSet[i].NumberU64() < self.current.Block.NumberU64() - freshFruitK){
+				j:=0
+			//	self.current.Block.fruits[j] :=  self.current.FruitSet[i]
+				 self.current.fruits[j] = self.fruitPoolSet[i]
+				 // we also need insert to block fruits
+				j++
+			}
+		}
 
 	//}
 }

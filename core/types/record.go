@@ -27,7 +27,7 @@ func (r *PbftRecord) Hash() common.Hash {
 
 func (r *PbftRecord) Number() *big.Int {
 	return r.header.Number
-}
+ }
 
 
 func (r *PbftRecord) Header() *PbftRecordHeader { return r.header }
@@ -40,4 +40,11 @@ func CopyRecord(r *PbftRecord) *PbftRecord {
 	}
 
 	return record
+}
+
+func NewPbftRecord(header *PbftRecordHeader, transactions Transactions,sig []*string) *PbftRecord {
+	return &PbftRecord{header:header,transactions:transactions,sig:sig}
+}
+func NewPbftRecordHeader(Number *big.Int,Hash common.Hash,GasLimit *big.Int,GasUsed  *big.Int,Time *big.Int) *PbftRecordHeader {
+	return &PbftRecordHeader{Number:Number,Hash:Hash,GasLimit:GasLimit,GasUsed:GasUsed,Time:Time}
 }

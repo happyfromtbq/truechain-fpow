@@ -17,6 +17,8 @@
 package core
 
 import (
+	//"github.com/ethereum/go-ethereum/eth"
+	
 	"errors"
 	"fmt"
 	"math"
@@ -26,6 +28,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/event"
@@ -33,6 +36,8 @@ import (
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
 	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
+	//"github.com/ethereum/go-ethereum/eth"
+	
 )
 
 const (
@@ -121,6 +126,8 @@ type blockChain interface {
 	SubscribeChainHeadEvent(ch chan<- ChainHeadEvent) event.Subscription
 }
 
+
+
 // TxPoolConfig are the configuration parameters of the transaction pool.
 type TxPoolConfig struct {
 	NoLocals  bool          // Whether local transaction handling should be disabled
@@ -154,6 +161,8 @@ var DefaultTxPoolConfig = TxPoolConfig{
 
 	Lifetime: 3 * time.Hour,
 }
+
+
 
 // sanitize checks the provided user configurations and changes anything that's
 // unreasonable or unworkable.
@@ -263,6 +272,8 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 	pool.wg.Add(1)
 	go pool.loop()
 
+	
+	//eth.NewRecord(pool)
 	return pool
 }
 
