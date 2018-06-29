@@ -36,8 +36,7 @@ import (
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
 	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
-	//"github.com/ethereum/go-ethereum/eth"
-	
+	"container/list"
 )
 
 const (
@@ -224,7 +223,7 @@ type TxPool struct {
 
 	fruits map[common.Hash]*types.Block
 	records map[common.Hash]*types.PbftRecord
-	recordList map[uint64]common.Hash
+	recordList *list.List
 
 	wg sync.WaitGroup // for shutdown sync
 
@@ -249,6 +248,8 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		all:         newTxLookup(),
 		chainHeadCh: make(chan ChainHeadEvent, chainHeadChanSize),
 		gasPrice:    new(big.Int).SetUint64(config.PriceLimit),
+
+		recordList:		list.New(),
 	}
 	pool.locals = newAccountSet(pool.signer)
 	pool.priced = newTxPricedList(pool.all)

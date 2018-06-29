@@ -35,8 +35,14 @@ func (r *PbftRecord) Header() *PbftRecordHeader { return r.header }
 
 func CopyRecord(r *PbftRecord) *PbftRecord {
 	// TODO: copy all record fields
+	header := NewPbftRecordHeader(r.header.Number, r.header.Hash, r.header.Time)
 	record := &PbftRecord{
+		header: header,
+	}
 
+	if len(r.transactions) != 0 {
+		record.transactions = make(Transactions, len(r.transactions))
+		copy(record.transactions, r.transactions)
 	}
 
 	return record
