@@ -148,6 +148,7 @@ func rlpHash(x interface{}) (h common.Hash) {
 // a block's data contents (transactions and uncles) together.
 type Body struct {
 	Transactions []*Transaction
+	Fruits		 []*Block
 	Uncles       []*Header
 }
 
@@ -202,6 +203,23 @@ type storageblock struct {
 }
 
 
+// Fruits is a wrapper around a fruit array to implement DerivableList.
+type Fruits []*Block
+
+// Len returns the number of fruits in this list.
+func (fs Fruits) Len() int { return len(fs) }
+
+// GetRlp returns the RLP encoding of one fruit from the list.
+func (fs Fruits) GetRlp(i int) []byte {
+	bytes, err := rlp.EncodeToBytes(fs[i])
+	if err != nil {
+		panic(err)
+	}
+	return bytes
+}
+
+
+
 // NewBlock creates a new block. The input data is copied,
 // changes to header and to the field values will not affect the
 // block.
@@ -232,7 +250,7 @@ func NewBlock(header *Header, txs []*Transaction, uncles []*Header, receipts []*
 		b.header.FruitsHash = EmptyRootHash
 	}else {
 		// TODO: get fruits hash
-		b.header.FruitsHash = EmptyRootHash
+		b.header.FruitsHash = DeriveSha(Fruits(fruits))
 		b.fruits = make([]*Block, len(fruits))
 		for i := range fruits {
 			b.fruits[i] = CopyFruit(fruits[i])
@@ -358,7 +376,7 @@ func (b *Block) Extra() []byte            { return common.CopyBytes(b.header.Ext
 func (b *Block) Header() *Header { return CopyHeader(b.header) }
 
 // Body returns the non-header content of the block.
-func (b *Block) Body() *Body { return &Body{b.transactions, b.uncles} }
+func (b *Block) Body() *Body { return &Body{b.transactions, b.fruits, b.uncles} }
 
 func (b *Block) HashNoNonce() common.Hash {
 	return b.header.HashNoNonce()

@@ -43,8 +43,17 @@ func CopyRecord(r *PbftRecord) *PbftRecord {
 }
 
 func NewPbftRecord(header *PbftRecordHeader, transactions Transactions,sig []*string) *PbftRecord {
-	return &PbftRecord{header:header,transactions:transactions,sig:sig}
+	return &PbftRecord{
+		header:       header,
+		transactions: transactions,
+		sig:          sig,
+	}
 }
-func NewPbftRecordHeader(Number *big.Int,Hash common.Hash,GasLimit *big.Int,GasUsed  *big.Int,Time *big.Int) *PbftRecordHeader {
-	return &PbftRecordHeader{Number:Number,Hash:Hash,GasLimit:GasLimit,GasUsed:GasUsed,Time:Time}
+
+func NewPbftRecordHeader(Number *big.Int,Hash common.Hash,Time *big.Int) *PbftRecordHeader {
+	return &PbftRecordHeader{
+		Number:   Number,
+		Hash:     Hash,
+		Time:     Time,
+	}
 }
