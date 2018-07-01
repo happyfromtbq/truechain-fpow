@@ -1,6 +1,7 @@
 package types
 
 import (
+	"time"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -9,6 +10,7 @@ import (
 type PbftRecordHeader struct {
 	Number   *big.Int
 	Hash     common.Hash
+	TxHash	common.Hash
 	GasLimit *big.Int
 	GasUsed  *big.Int
 	Time     *big.Int
@@ -32,12 +34,19 @@ func (r *PbftRecord) Number() *big.Int {
 
 func (r *PbftRecord) Header() *PbftRecordHeader { return r.header }
 
+func (r *PbftRecord) Transactions() Transactions { return r.transactions }
+
 
 func CopyRecord(r *PbftRecord) *PbftRecord {
-	// TODO: copy all record fields
-	header := NewPbftRecordHeader(r.header.Number, r.header.Hash, r.header.Time)
 	record := &PbftRecord{
-		header: header,
+		header: &PbftRecordHeader{
+			Number: r.header.Number,
+			Hash:	r.header.Hash,
+			TxHash:	r.header.TxHash,
+			GasLimit: r.header.GasLimit,
+			GasUsed: r.header.GasUsed,
+			Time: 	r.header.Time,
+		},
 	}
 
 	if len(r.transactions) != 0 {
@@ -45,21 +54,37 @@ func CopyRecord(r *PbftRecord) *PbftRecord {
 		copy(record.transactions, r.transactions)
 	}
 
+	// TODO: copy sigs
+
 	return record
 }
 
-func NewPbftRecord(header *PbftRecordHeader, transactions Transactions,sig []*string) *PbftRecord {
-	return &PbftRecord{
-		header:       header,
-		transactions: transactions,
-		sig:          sig,
-	}
-}
 
-func NewPbftRecordHeader(Number *big.Int,Hash common.Hash,Time *big.Int) *PbftRecordHeader {
-	return &PbftRecordHeader{
-		Number:   Number,
-		Hash:     Hash,
-		Time:     Time,
+func NewRecord(number *big.Int, txs []*Transaction, sig []*string) *PbftRecord {
+
+	r := &PbftRecord{
+		header: &PbftRecordHeader {
+			Number: number,
+			Time: big.NewInt(time.Now().Unix()),
+		},
 	}
+
+	if len(txs) == 0 {
+		r.header.TxHash = EmptyRootHash
+	} else {
+		r.header.TxHash = DeriveSha(Transactions(txs))
+		r.transactions = make(Transactions, len(txs))
+		copy(r.transactions, txs)
+	}
+
+	r.header.Hash = rlpHash([]interface{}{
+		r.header.Number,
+		r.header.TxHash,
+		r.header.GasLimit,
+		r.header.GasUsed,
+		r.header.Time,
+		r.sig,
+	})
+
+	return r
 }
