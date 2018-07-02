@@ -70,6 +70,7 @@ type ProtocolManager struct {
 	acceptTxs uint32 // Flag whether we're considered synchronised (enables transaction processing)
 
 	txpool      txPool
+	hybridpool 	hybridPool
 	blockchain  *core.BlockChain
 	chainconfig *params.ChainConfig
 	maxPeers    int
@@ -98,12 +99,13 @@ type ProtocolManager struct {
 
 // NewProtocolManager returns a new Ethereum sub protocol manager. The Ethereum sub protocol manages peers capable
 // with the Ethereum network.
-func NewProtocolManager(config *params.ChainConfig, mode downloader.SyncMode, networkId uint64, mux *event.TypeMux, txpool txPool, engine consensus.Engine, blockchain *core.BlockChain, chaindb ethdb.Database) (*ProtocolManager, error) {
+func NewProtocolManager(config *params.ChainConfig, mode downloader.SyncMode, networkId uint64, mux *event.TypeMux, txpool txPool, hybridpool hybridPool, engine consensus.Engine, blockchain *core.BlockChain, chaindb ethdb.Database) (*ProtocolManager, error) {
 	// Create the protocol manager with the base fields
 	manager := &ProtocolManager{
 		networkId:   networkId,
 		eventMux:    mux,
 		txpool:      txpool,
+		hybridpool:	 hybridpool,
 		blockchain:  blockchain,
 		chainconfig: config,
 		peers:       newPeerSet(),
@@ -692,7 +694,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			// TODO: add markrecord
 			//p.MarkTransaction(tx.Hash())
 		}
-		pm.txpool.AddRemoteRecords(records)
+		pm.hybridpool.AddRemoteRecords(records)
 
 	case msg.Code == FruitMsg:
 		// TODO: fruit msg handle
@@ -713,7 +715,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			// TODO: 
 			p.MarkTransaction(fruit.Hash())
 		}
-		pm.txpool.AddRemoteFruits(fruits)
+		pm.hybridpool.AddRemoteFruits(fruits)
 
 	default:
 		return errResp(ErrInvalidMsgCode, "%v", msg.Code)

@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/event"
@@ -34,7 +33,6 @@ import (
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
 	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
-	"container/list"
 )
 
 const (
@@ -123,8 +121,6 @@ type blockChain interface {
 	SubscribeChainHeadEvent(ch chan<- ChainHeadEvent) event.Subscription
 }
 
-
-
 // TxPoolConfig are the configuration parameters of the transaction pool.
 type TxPoolConfig struct {
 	NoLocals  bool          // Whether local transaction handling should be disabled
@@ -158,8 +154,6 @@ var DefaultTxPoolConfig = TxPoolConfig{
 
 	Lifetime: 3 * time.Hour,
 }
-
-
 
 // sanitize checks the provided user configurations and changes anything that's
 // unreasonable or unworkable.
@@ -212,27 +206,6 @@ type TxPool struct {
 	all     *txLookup                    // All transactions to allow lookups
 	priced  *txPricedList                // All transactions sorted by price
 
-	fruitFeed   event.Feed
-	recordFeed	event.Feed
-
-	muFruit		sync.RWMutex
-	muRecord	sync.RWMutex
-
-
-	records map[common.Hash]*types.PbftRecord
-	recordnumber map[uint64]*types.PbftRecord
-
-	recordList       *list.List
-
-	fruits map[common.Hash]*types.Block
-	fruitList		 *list.List		// not verified allFruits
-	fruitPendingList *list.List
-
-	header           *types.Header
-
-	state     *state.StateDB
-	gasPool   *GasPool  // available gas used to pack transactions
-
 	wg sync.WaitGroup // for shutdown sync
 
 	homestead bool
@@ -256,11 +229,6 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		all:         newTxLookup(),
 		chainHeadCh: make(chan ChainHeadEvent, chainHeadChanSize),
 		gasPrice:    new(big.Int).SetUint64(config.PriceLimit),
-
-		records:          make(map[common.Hash]*types.PbftRecord),
-		fruits:           make(map[common.Hash]*types.Block),
-		recordList:       list.New(),
-		fruitPendingList: list.New(),
 	}
 	pool.locals = newAccountSet(pool.signer)
 	pool.priced = newTxPricedList(pool.all)
@@ -284,8 +252,6 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 	pool.wg.Add(1)
 	go pool.loop()
 
-	
-	//eth.NewRecord(pool)
 	return pool
 }
 
@@ -483,7 +449,6 @@ func (pool *TxPool) Stop() {
 func (pool *TxPool) SubscribeNewTxsEvent(ch chan<- NewTxsEvent) event.Subscription {
 	return pool.scope.Track(pool.txFeed.Subscribe(ch))
 }
-
 
 // GasPrice returns the current gas price enforced by the transaction pool.
 func (pool *TxPool) GasPrice() *big.Int {

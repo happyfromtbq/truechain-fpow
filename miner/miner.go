@@ -39,6 +39,7 @@ type Backend interface {
 	AccountManager() *accounts.Manager
 	BlockChain() *core.BlockChain
 	TxPool() *core.TxPool
+	HybridPool() *core.HybridPool
 	ChainDb() ethdb.Database
 }
 

@@ -109,10 +109,13 @@ type txPool interface {
 	// SubscribeNewTxsEvent should return an event subscription of
 	// NewTxsEvent and send events to the given channel.
 	SubscribeNewTxsEvent(chan<- core.NewTxsEvent) event.Subscription
+}
 
+
+type hybridPool interface {
 	AddRemoteFruits([]*types.Block) []error
 	PendingFruits() (map[common.Hash]types.Block, error)
-	SubscribeNewFruitsEvent(chan<- core.NewFruitEvent) event.Subscription
+	SubscribeNewFruitEvent(chan<- core.NewFruitEvent) event.Subscription
 
 	AddRemoteRecords([]*types.PbftRecord) []error
 	PendingRecords() (*types.PbftRecord, error)

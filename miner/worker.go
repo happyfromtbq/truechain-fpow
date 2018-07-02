@@ -84,7 +84,7 @@ type Work struct {
 	header   *types.Header
 	txs      []*types.Transaction
 	receipts []*types.Receipt
-	fruits	 []*types.Block // for the fresh neo20180627
+	fruits   []*types.Block // for the fresh neo20180627
 
 	createdAt time.Time
 }
@@ -365,34 +365,32 @@ func (self *worker) waitfruit(Work *Work) {
 	*/
 
 	// put it in to fruit pool
-	
+
 	//AppendingFruits
 	//AppendingRecord
 	// 广播
 
 	// Update the block hash in all logs since it is now available and not when the
-				// receipt/log of individual transactions were created.
-				
-							
-				// check if canon block and write transactions
-				/*if stat == core.CanonStatTy {
-					// implicit by posting ChainHeadEvent
-					mustCommitNewWork = false
-				}
-				
-				// Broadcast the block and announce chain insertion event
-				self.mux.Post(core.NewMinedFruitEvent{Block: work})
-				var (
-					events []interface{}
-					logs   = work.state.Logs()
-				)
-				events = append(events, core.FruitEvent{Block: block, Hash: block.Hash(), Logs: logs})
-				if stat == core.CanonStatTy {
-					events = append(events, core.FruitFleashEvent{Block: block})
-				}
-				self.chain.PostChainEvents(events, logs)
-				*/
+	// receipt/log of individual transactions were created.
 
+	// check if canon block and write transactions
+	/*if stat == core.CanonStatTy {
+		// implicit by posting ChainHeadEvent
+		mustCommitNewWork = false
+	}
+
+	// Broadcast the block and announce chain insertion event
+	self.mux.Post(core.NewMinedFruitEvent{Block: work})
+	var (
+		events []interface{}
+		logs   = work.state.Logs()
+	)
+	events = append(events, core.FruitEvent{Block: block, Hash: block.Hash(), Logs: logs})
+	if stat == core.CanonStatTy {
+		events = append(events, core.FruitFleashEvent{Block: block})
+	}
+	self.chain.PostChainEvents(events, logs)
+	*/
 
 }
 
@@ -416,9 +414,8 @@ func (self *worker) wait() {
 			if isFruit == true {
 
 				//neo 20180628
-				// put it into pool first	
-				
-				
+				// put it into pool first
+
 				// Broadcast the block and announce chain insertion event
 				self.mux.Post(core.NewMinedFruitEvent{Block: block})
 				var (
@@ -426,7 +423,7 @@ func (self *worker) wait() {
 					logs   = work.state.Logs()
 				)
 				events = append(events, core.FruitEvent{Block: block, Hash: block.Hash(), Logs: logs})
-				
+
 				//self.chain.PostChainEvents(events, logs)
 
 			} else {
@@ -479,7 +476,7 @@ func (self *worker) wait() {
 // push sends a new work task to currently live miner agents.
 func (self *worker) push(work *Work) {
 	if atomic.LoadInt32(&self.mining) != 1 {
-		return
+		return //neo mark 20180701
 	}
 	for agent := range self.agents {
 		atomic.AddInt32(&self.atWork, 1)
@@ -502,17 +499,17 @@ func (self *worker) makeFruittoCurrent() {
 	//for hash, uncle := range self.possibleUncles
 	//FruitSet []*types.Block
 	//for fruit := range self.current.FruitSet {
-		//判断pool里面的水果是否新鲜 通过index来判断
-		for i :=0; i<len(self.fruitPoolSet);i++ {
+	//判断pool里面的水果是否新鲜 通过index来判断
+	for i := 0; i < len(self.fruitPoolSet); i++ {
 
-			if(self.fruitPoolSet[i].NumberU64() < self.current.Block.NumberU64() - freshFruitK){
-				j:=0
+		if self.fruitPoolSet[i].NumberU64() < self.current.Block.NumberU64()-freshFruitK {
+			j := 0
 			//	self.current.Block.fruits[j] :=  self.current.FruitSet[i]
-				 self.current.fruits[j] = self.fruitPoolSet[i]
-				 // we also need insert to block fruits
-				j++
-			}
+			self.current.fruits[j] = self.fruitPoolSet[i]
+			// we also need insert to block fruits
+			j++
 		}
+	}
 
 	//}
 }
@@ -544,7 +541,7 @@ func (self *worker) makeCurrent(parent *types.Block, header *types.Header) error
 	}
 
 	//neo 20180625
-	self.makeFruittoCurrent()
+	//self.makeFruittoCurrent()
 
 	// Keep track of transactions which return errors so they can be removed
 	work.tcount = 0
@@ -615,13 +612,53 @@ func (self *worker) commitNewWork() {
 	if self.config.DAOForkSupport && self.config.DAOForkBlock != nil && self.config.DAOForkBlock.Cmp(header.Number) == 0 {
 		misc.ApplyDAOHardFork(work.state)
 	}
-	pending, err := self.eth.TxPool().Pending()
+	//pending, err := self.eth.TxPool().Pending()
+	//func (pool *TxPool) Pending() (map[common.Address]types.Transactions, error)
+	//PendingRecords, err := self.eth.TxPool().PendingRecords()
+	PendingRecords, err := self.eth.HybridPool().PendingRecords()
+	PengdingFruit, err := self.eth.HybridPool().PendingFruits()
 	if err != nil {
 		log.Error("Failed to fetch pending transactions", "err", err)
 		return
 	}
-	txs := types.NewTransactionsByPriceAndNonce(self.current.signer, pending)
-	work.commitTransactions(self.mux, txs, self.chain, self.coinbase)
+
+	log.Info("s", PendingRecords)
+	log.Info("s", PengdingFruit)
+
+	/*
+		self.current.txs :=PendingRecords->t
+
+		type Work struct {
+			config *params.ChainConfig
+			signer types.Signer
+
+			state     *state.StateDB // apply state changes here
+			ancestors *set.Set       // ancestor set (used for checking uncle parent validity)
+			family    *set.Set       // family set (used for checking uncle invalidity)
+			uncles    *set.Set       // uncle set
+			tcount    int            // tx count in cycle
+			gasPool   *core.GasPool  // available gas used to pack transactions
+
+			Block *types.Block // the new block
+
+			FruitSet []*types.Block //the for fruitset
+
+			header   *types.Header
+			txs      []*types.Transaction
+			receipts []*types.Receipt
+			fruits	 []*types.Block // for the fresh neo20180627
+
+			createdAt time.Time
+		}
+
+	*/
+
+	//txs := PendingRecords.
+
+	//txs := types.NewTransactionsByPriceAndNonce(self.current.signer, pending)
+	//txs := types.NewTransactionsByPriceAndNonce(self.current.signer, PendingRecords)
+	//work.commitTransactions(self.mux, txs, self.chain, self.coinbase)
+	//work.commitTransactions(self.mux, nil, self.chain, self.coinbase)
 
 	// compute uncles for the new block.
 	var (

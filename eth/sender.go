@@ -22,8 +22,8 @@ var (
 )
 
 type RecordSender struct {
-	txpool *core.TxPool
-	signer types.Signer
+	hybridpool *core.HybridPool
+	signer     types.Signer
 
 	sendAccout *ecdsa.PrivateKey
 	recvAddr   common.Address
@@ -64,7 +64,7 @@ func (sender *RecordSender) send() {
 			var records []*types.PbftRecord
 			records = append(records, prd)
 
-			sender.txpool.AddRemoteRecords(records)
+			sender.hybridpool.AddRemoteRecords(records)
 		}
 	}
 }
@@ -73,13 +73,13 @@ func (sender *RecordSender) Start() {
 	go sender.send()
 }
 
-func NewSender(txpool *core.TxPool, chainconfig *params.ChainConfig) *RecordSender {
+func NewSender(hybridpool *core.HybridPool, chainconfig *params.ChainConfig) *RecordSender {
 	acc, _ := crypto.HexToECDSA(sendPrivHex)
 
 	// TODO: get key and account address to send
 
 	sendRecord := &RecordSender{
-		txpool:     txpool,
+		hybridpool: hybridpool,
 		signer:     types.NewEIP155Signer(chainconfig.ChainId),
 		sendAccout: acc,
 		recvAddr:   common.HexToAddress(recvAddrHex),
