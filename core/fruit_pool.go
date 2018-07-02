@@ -17,11 +17,21 @@
 package core
 
 import (
+	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/event"
 )
+
+type PoolInfo struct {
+	Hash   common.Hash
+	Number *big.Int
+}
+
+func (pool *TxPool) ProcessFruits() {
+
+}
 
 // AddLocals enqueues a batch of transactions into the pool if they are valid,
 // marking the senders as a local ones in the mean time, ensuring they go around
@@ -39,7 +49,7 @@ func (pool *TxPool) AddRemoteFruits(fruits []*types.Block) []error {
 			pool.fruits[fruit.Hash()] = types.CopyFruit(fruit)
 		} else {
 			// contain the fruit who has the smaller hash
-			if fruit.Hash().Big().Cmp(pre.Hash().Big()) == 1 {
+			if fruit.Hash().Big().Cmp(pre.Hash().Big()) > 0 {
 				pool.fruits[fruit.Hash()] = types.CopyFruit(fruit)
 			}
 		}
@@ -48,8 +58,7 @@ func (pool *TxPool) AddRemoteFruits(fruits []*types.Block) []error {
 	return nil
 }
 
-
-// Pending retrieves all currently processable fruits, sorted by record number.
+// Pending retrieves all currently processable allFruits, sorted by record number.
 // The returned fruit set is a copy and can be freely modified by calling code.
 func (pool *TxPool) PendingFruits() (map[common.Hash]types.Block, error) {
 	pool.muFruit.Lock()
@@ -62,7 +71,6 @@ func (pool *TxPool) PendingFruits() (map[common.Hash]types.Block, error) {
 
 	return pending, nil
 }
-
 
 // SubscribeNewFruitsEvent registers a subscription of NewFruitEvent and
 // starts sending event to the given channel.

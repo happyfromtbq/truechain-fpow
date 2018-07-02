@@ -17,8 +17,6 @@
 package core
 
 import (
-	//"github.com/ethereum/go-ethereum/eth"
-	
 	"errors"
 	"fmt"
 	"math"
@@ -214,16 +212,26 @@ type TxPool struct {
 	all     *txLookup                    // All transactions to allow lookups
 	priced  *txPricedList                // All transactions sorted by price
 
-
 	fruitFeed   event.Feed
 	recordFeed	event.Feed
 
 	muFruit		sync.RWMutex
 	muRecord	sync.RWMutex
 
-	fruits map[common.Hash]*types.Block
+
 	records map[common.Hash]*types.PbftRecord
-	recordList *list.List
+	recordnumber map[uint64]*types.PbftRecord
+
+	recordList       *list.List
+
+	fruits map[common.Hash]*types.Block
+	fruitList		 *list.List		// not verified allFruits
+	fruitPendingList *list.List
+
+	header           *types.Header
+
+	state     *state.StateDB
+	gasPool   *GasPool  // available gas used to pack transactions
 
 	wg sync.WaitGroup // for shutdown sync
 
@@ -249,7 +257,10 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		chainHeadCh: make(chan ChainHeadEvent, chainHeadChanSize),
 		gasPrice:    new(big.Int).SetUint64(config.PriceLimit),
 
-		recordList:		list.New(),
+		records:          make(map[common.Hash]*types.PbftRecord),
+		fruits:           make(map[common.Hash]*types.Block),
+		recordList:       list.New(),
+		fruitPendingList: list.New(),
 	}
 	pool.locals = newAccountSet(pool.signer)
 	pool.priced = newTxPricedList(pool.all)
