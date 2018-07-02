@@ -16,6 +16,7 @@ type PbftRecordHeader struct {
 	Time     *big.Int
 }
 
+
 type PbftRecord struct {
 	header       *PbftRecordHeader
 	transactions Transactions
@@ -31,10 +32,22 @@ func (r *PbftRecord) Number() *big.Int {
 	return r.header.Number
  }
 
-
 func (r *PbftRecord) Header() *PbftRecordHeader { return r.header }
 
+func (r *PbftRecord) TxHash() common.Hash {return r.header.TxHash}
+
 func (r *PbftRecord) Transactions() Transactions { return r.transactions }
+
+func (r *PbftRecord) CalcHash() common.Hash {
+	return rlpHash([]interface{}{
+		r.header.Number,
+		r.header.TxHash,
+		r.header.GasLimit,
+		r.header.GasUsed,
+		r.header.Time,
+		r.sig,
+	})
+}
 
 
 func CopyRecord(r *PbftRecord) *PbftRecord {
@@ -77,14 +90,7 @@ func NewRecord(number *big.Int, txs []*Transaction, sig []*string) *PbftRecord {
 		copy(r.transactions, txs)
 	}
 
-	r.header.Hash = rlpHash([]interface{}{
-		r.header.Number,
-		r.header.TxHash,
-		r.header.GasLimit,
-		r.header.GasUsed,
-		r.header.Time,
-		r.sig,
-	})
+	r.header.Hash = r.CalcHash()
 
 	return r
 }
