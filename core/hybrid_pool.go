@@ -159,7 +159,7 @@ type HybridPool struct {
 
 	header *types.Block
 
-	state   *state.StateDB
+	gasUsed	uint64
 	gasPool *GasPool // available gas used to pack transactions
 
 	wg sync.WaitGroup // for shutdown sync
@@ -290,13 +290,12 @@ func (pool *HybridPool) addFruit(fruit *types.Block) error {
 	return nil
 }
 
-func (pool *HybridPool) commitTransaction(tx *types.Transaction, bc *BlockChain, coinbase common.Address, gp *GasPool) (error, *types.Receipt) {
-	snap := pool.state.Snapshot()
+func (pool *HybridPool) commitTransaction(tx *types.Transaction, coinbase common.Address, gp *GasPool, gasUsed *uint64) (error, *types.Receipt) {
+	snap := pool.currentState.Snapshot()
 
-	gasUsed := pool.header.GasUsed()
-	receipt, _, err := ApplyTransaction(pool.chainconfig, bc, &coinbase, gp, pool.state, pool.header.Header(), tx, &gasUsed, vm.Config{})
+	receipt, _, err := ApplyTransaction(pool.chainconfig, pool.chain, &coinbase, gp, pool.currentState, pool.header.Header(), tx, gasUsed, vm.Config{})
 	if err != nil {
-		pool.state.RevertToSnapshot(snap)
+		pool.currentState.RevertToSnapshot(snap)
 		return err, nil
 	}
 
@@ -306,10 +305,14 @@ func (pool *HybridPool) commitTransaction(tx *types.Transaction, bc *BlockChain,
 func (pool *HybridPool) commitRecord(record *types.PbftRecord, coinbase common.Address) (error, []*types.Receipt) {
 	var receipts []*types.Receipt
 
-	return nil, nil
+	if pool.gasPool == nil {
+		pool.gasPool = new(GasPool).AddGas(pool.header.GasLimit())
+	}
+
+	//return nil, nil
 
 	for _, tx := range record.Transactions() {
-		err, receipt := pool.commitTransaction(tx, pool.chain, coinbase, pool.gasPool)
+		err, receipt := pool.commitTransaction(tx, coinbase, pool.gasPool, &pool.gasUsed)
 
 		if err != nil {
 			return err, nil
@@ -333,6 +336,8 @@ func (pool *HybridPool) updateRecordsWithLock(number *big.Int) {
 			err, _ := pool.commitRecord(r, common.Address{})
 			if err == nil {
 				pool.insertRecordWithLock(pool.recordPending, r)
+				go pool.recordFeed.Send(NewRecordEvent{r})
+
 				pool.updateFruit(r)
 
 				remove = append(remove, lr)
@@ -364,6 +369,9 @@ func (pool *HybridPool) addRecord(record *types.PbftRecord) error {
 
 	} else {
 		pool.insertRecordWithLock(pool.recordPending, record)
+
+		go pool.recordFeed.Send(NewRecordEvent{record})
+
 		pool.updateFruit(record)
 
 		pool.updateRecordsWithLock(record.Number())
@@ -628,13 +636,13 @@ func (pool *HybridPool) AddRemoteFruits(fruits []*types.Block) []error {
 
 // Pending retrieves all currently processable allFruits, sorted by record number.
 // The returned fruit set is a copy and can be freely modified by calling code.
-func (pool *HybridPool) PendingFruits() (map[common.Hash]types.Block, error) {
+func (pool *HybridPool) PendingFruits() (map[common.Hash]*types.Block, error) {
 	pool.muFruit.Lock()
 	defer pool.muFruit.Unlock()
 
-	pending := make(map[common.Hash]types.Block)
-	for addr, list := range pool.allFruits {
-		pending[addr] = *types.CopyFruit(list)
+	pending := make(map[common.Hash]*types.Block)
+	for addr, fruit := range pool.fruitPending {
+		pending[addr] = types.CopyFruit(fruit)
 	}
 
 	return pending, nil

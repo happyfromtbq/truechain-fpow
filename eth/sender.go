@@ -15,8 +15,8 @@ import (
 var (
 	sendInterval = 1 * time.Second // Time interval to send record
 
-	sendAddrHex  = "970e8128ab834e8eac17ab8e3812f010678cf791"
-	sendPrivHex  = "289c2857d4598e37fb9647507e47a309d6133539bf21a8b9cb6df88fd5232032"
+	sendAddrHex = "970e8128ab834e8eac17ab8e3812f010678cf791"
+	sendPrivHex = "289c2857d4598e37fb9647507e47a309d6133539bf21a8b9cb6df88fd5232032"
 
 	recvAddrHex = "68f2517b6c597ede0ae7c0559cdd4a84fd08c928"
 )
@@ -32,7 +32,7 @@ type RecordSender struct {
 // newTestTransaction create a new dummy transaction.
 func (sender *RecordSender) newSendTransaction(nonce uint64, datasize int) *types.Transaction {
 
-	tx := types.NewTransaction(nonce, sender.recvAddr, big.NewInt(1e+18), 100000, big.NewInt(1e+15), make([]byte, datasize))
+	tx := types.NewTransaction(nonce, sender.recvAddr, big.NewInt(1e+18), 100000, big.NewInt(1e+12), make([]byte, datasize))
 	tx, _ = types.SignTx(tx, sender.signer, sender.sendAccout)
 	return tx
 }
@@ -52,8 +52,8 @@ func (sender *RecordSender) send() {
 			//*types.Transaction
 			txs := make([]*types.Transaction, 1)
 			for i := range txs {
-				nonce++
 				txs[i] = sender.newSendTransaction(nonce, 0)
+				nonce++
 			}
 
 			//header

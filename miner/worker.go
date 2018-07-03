@@ -50,9 +50,11 @@ const (
 	chainHeadChanSize = 10
 	// chainSideChanSize is the size of channel listening to ChainSideEvent.
 	chainSideChanSize = 10
+)
 
-	// neo 20180627 freshFruit for k is a range of index for
-	freshFruitK = 8
+var (
+	// fruit freshness
+	fruitFreshness *big.Int = big.NewInt(17)
 )
 
 // Agent can register themself with the worker
@@ -277,7 +279,7 @@ func (self *worker) updateofFruitTx([]*types.Block) {
 }
 
 //Neo 20180626 for record pool event
-func (self *worker) updateofRecordTx([]*types.PbftRecord) {
+func (self *worker) updateofRecordTx(*types.PbftRecord) {
 
 }
 
@@ -320,8 +322,8 @@ func (self *worker) update() {
 					txs[acc] = append(txs[acc], tx)
 				}
 
-				txset := types.NewTransactionsByPriceAndNonce(self.current.signer, txs)
-				self.current.commitTransactions(self.mux, txset, self.chain, self.coinbase)
+				//txset := types.NewTransactionsByPriceAndNonce(self.current.signer, txs)
+				//self.current.commitTransactions(self.mux, txset, self.chain, self.coinbase)
 				self.updateSnapshot()
 				self.currentMu.Unlock()
 			} else {
@@ -338,7 +340,7 @@ func (self *worker) update() {
 			//return
 
 		case ev := <-self.recordCh:
-			self.updateofRecordTx(ev.Records)
+			self.updateofRecordTx(ev.Record)
 
 			//return
 		// System stopped
@@ -415,7 +417,6 @@ func (self *worker) wait() {
 
 				//neo 20180628
 				// put it into pool first
-
 				// Broadcast the block and announce chain insertion event
 				self.mux.Post(core.NewMinedFruitEvent{Block: block})
 				var (
@@ -465,10 +466,11 @@ func (self *worker) wait() {
 				// Insert the block into the set of pending ones to wait for confirmations
 				self.unconfirmed.Insert(block.NumberU64(), block.Hash())
 
+				if mustCommitNewWork {
+					self.commitNewWork()
+				}
 			}
-			if mustCommitNewWork {
-				self.commitNewWork()
-			}
+
 		}
 	}
 }
@@ -484,34 +486,6 @@ func (self *worker) push(work *Work) {
 			ch <- work
 		}
 	}
-}
-
-// when we creat a new block we sould filling fruit
-func (self *worker) makeFruittoCurrent() {
-	log.Info("neo makeFruittoCurrent 20180625")
-	// frist find the fruit
-	//fruit
-	//self.current.Block. := &fruit
-	//fruit := append(fruit,self.current.Block.Fruit[])
-
-	//把fruit pool 里面的fruit 放到当前块里面来
-	//map[common.Hash]*types.Block
-	//for hash, uncle := range self.possibleUncles
-	//FruitSet []*types.Block
-	//for fruit := range self.current.FruitSet {
-	//判断pool里面的水果是否新鲜 通过index来判断
-	for i := 0; i < len(self.fruitPoolSet); i++ {
-
-		if self.fruitPoolSet[i].NumberU64() < self.current.Block.NumberU64()-freshFruitK {
-			j := 0
-			//	self.current.Block.fruits[j] :=  self.current.FruitSet[i]
-			self.current.fruits[j] = self.fruitPoolSet[i]
-			// we also need insert to block fruits
-			j++
-		}
-	}
-
-	//}
 }
 
 // makeCurrent creates a new environment for the current cycle.
@@ -539,9 +513,6 @@ func (self *worker) makeCurrent(parent *types.Block, header *types.Header) error
 		work.family.Add(ancestor.Hash())
 		work.ancestors.Add(ancestor.Hash())
 	}
-
-	//neo 20180625
-	//self.makeFruittoCurrent()
 
 	// Keep track of transactions which return errors so they can be removed
 	work.tcount = 0
@@ -612,54 +583,23 @@ func (self *worker) commitNewWork() {
 	if self.config.DAOForkSupport && self.config.DAOForkBlock != nil && self.config.DAOForkBlock.Cmp(header.Number) == 0 {
 		misc.ApplyDAOHardFork(work.state)
 	}
-	//pending, err := self.eth.TxPool().Pending()
-	//func (pool *TxPool) Pending() (map[common.Address]types.Transactions, error)
-	//PendingRecords, err := self.eth.TxPool().PendingRecords()
-	PendingRecords, err := self.eth.HybridPool().PendingRecords()
-	PengdingFruit, err := self.eth.HybridPool().PendingFruits()
+	PendingRecord, err := self.eth.HybridPool().PendingRecords()
+	if err != nil {
+		return
+	}
+	if PendingRecord != nil {
+		for _, tx := range PendingRecord.Transactions() {
+			work.txs = append(work.txs, tx)
+		}
+	}
+
+	PendingFruits, err := self.eth.HybridPool().PendingFruits()
 	if err != nil {
 		log.Error("Failed to fetch pending transactions", "err", err)
 		return
 	}
-
-	log.Info("s", PendingRecords)
-	log.Info("s", PengdingFruit)
-
-	/*
-		self.current.txs :=PendingRecords->t
-
-		type Work struct {
-			config *params.ChainConfig
-			signer types.Signer
-
-			state     *state.StateDB // apply state changes here
-			ancestors *set.Set       // ancestor set (used for checking uncle parent validity)
-			family    *set.Set       // family set (used for checking uncle invalidity)
-			uncles    *set.Set       // uncle set
-			tcount    int            // tx count in cycle
-			gasPool   *core.GasPool  // available gas used to pack transactions
-
-			Block *types.Block // the new block
-
-			FruitSet []*types.Block //the for fruitset
-
-			header   *types.Header
-			txs      []*types.Transaction
-			receipts []*types.Receipt
-			fruits	 []*types.Block // for the fresh neo20180627
-
-			createdAt time.Time
-		}
-
-	*/
-
-	//txs := PendingRecords.
-
-	//txs := types.NewTransactionsByPriceAndNonce(self.current.signer, pending)
-	//txs := types.NewTransactionsByPriceAndNonce(self.current.signer, PendingRecords)
-	//work.commitTransactions(self.mux, txs, self.chain, self.coinbase)
-	//work.commitTransactions(self.mux, nil, self.chain, self.coinbase)
-
+	fruits := FruitsByNumber(PendingFruits)
+	work.commitFruits(fruits, self.chain, self.coinbase)
 	// compute uncles for the new block.
 	var (
 		uncles    []*types.Header
@@ -737,101 +677,70 @@ func (self *worker) updateSnapshot() {
 	self.snapshotState = self.current.state.Copy()
 }
 
-func (env *Work) commitTransactions(mux *event.TypeMux, txs *types.TransactionsByPriceAndNonce, bc *core.BlockChain, coinbase common.Address) {
+func (env *Work) commitTransaction(tx *types.Transaction, bc *core.BlockChain, coinbase common.Address, gp *core.GasPool) (error, *types.Receipt) {
+	//snap := env.state.Snapshot()
+
+	receipt, _, err := core.ApplyTransaction(env.config, bc, &coinbase, gp, env.state, env.header, tx, &env.header.GasUsed, vm.Config{})
+	if err != nil {
+		//env.state.RevertToSnapshot(snap)
+		return err, nil
+	}
+	//env.txs = append(env.txs, tx)
+
+	//env.receipts = append(env.receipts, receipt)
+	return nil, receipt
+}
+
+func (env *Work) commitFruit(fruit *types.Block, bc *core.BlockChain, coinbase common.Address) (error, []*types.Receipt) {
+
+	var receipts []*types.Receipt
+
+	freshNumber := env.header.Number.Sub(env.header.Number, fruit.Number())
+	if freshNumber.Cmp(fruitFreshness) > 0 {
+		return core.ErrFreshness, nil
+	}
+
+	snap := env.state.Snapshot()
+
+	for _, tx := range fruit.Transactions() {
+		err, receipt := env.commitTransaction(tx, bc, coinbase, env.gasPool)
+		if err == nil {
+			receipts = append(receipts, receipt)
+		} else {
+			env.state.RevertToSnapshot(snap)
+			return err, nil
+		}
+	}
+
+	return nil, receipts
+}
+
+func FruitsByNumber(fruits map[common.Hash]*types.Block) []*types.Block {
+
+	fruitset := make([]*types.Block, len(fruits))
+
+	// TODO order by record number
+	for _, fruit := range fruits {
+
+		fruitset = append(fruitset, fruit)
+	}
+
+	return fruitset
+}
+
+func (env *Work) commitFruits(fruits []*types.Block, bc *core.BlockChain, coinbase common.Address) {
 	if env.gasPool == nil {
 		env.gasPool = new(core.GasPool).AddGas(env.header.GasLimit)
 	}
 
-	var coalescedLogs []*types.Log
-
-	for {
-		// If we don't have enough gas for any further transactions then we're done
-		if env.gasPool.Gas() < params.TxGas {
-			log.Trace("Not enough gas for further transactions", "have", env.gasPool, "want", params.TxGas)
-			break
-		}
-		// Retrieve the next transaction and abort if all done
-		tx := txs.Peek()
-		if tx == nil {
-			break
-		}
-		// Error may be ignored here. The error has already been checked
-		// during transaction acceptance is the transaction pool.
-		//
-		// We use the eip155 signer regardless of the current hf.
-		from, _ := types.Sender(env.signer, tx)
-		// Check whether the tx is replay protected. If we're not in the EIP155 hf
-		// phase, start ignoring the sender until we do.
-		if tx.Protected() && !env.config.IsEIP155(env.header.Number) {
-			log.Trace("Ignoring reply protected transaction", "hash", tx.Hash(), "eip155", env.config.EIP155Block)
-
-			txs.Pop()
-			continue
-		}
-		// Start executing the transaction
-		env.state.Prepare(tx.Hash(), common.Hash{}, env.tcount)
-
-		err, logs := env.commitTransaction(tx, bc, coinbase, env.gasPool)
-		switch err {
-		case core.ErrGasLimitReached:
-			// Pop the current out-of-gas transaction without shifting in the next from the account
-			log.Trace("Gas limit exceeded for current block", "sender", from)
-			txs.Pop()
-
-		case core.ErrNonceTooLow:
-			// New head notification data race between the transaction pool and miner, shift
-			log.Trace("Skipping transaction with low nonce", "sender", from, "nonce", tx.Nonce())
-			txs.Shift()
-
-		case core.ErrNonceTooHigh:
-			// Reorg notification data race between the transaction pool and miner, skip account =
-			log.Trace("Skipping account with hight nonce", "sender", from, "nonce", tx.Nonce())
-			txs.Pop()
-
-		case nil:
-			// Everything ok, collect the logs and shift in the next transaction from the same account
-			coalescedLogs = append(coalescedLogs, logs...)
-			env.tcount++
-			txs.Shift()
-
-		default:
-			// Strange error, discard the transaction and get the next in line (note, the
-			// nonce-too-high clause will prevent us from executing in vain).
-			log.Debug("Transaction failed, account skipped", "hash", tx.Hash(), "err", err)
-			txs.Shift()
-		}
-	}
-
-	if len(coalescedLogs) > 0 || env.tcount > 0 {
-		// make a copy, the state caches the logs and these logs get "upgraded" from pending to mined
-		// logs by filling in the block hash when the block was mined by the local miner. This can
-		// cause a race condition if a log was "upgraded" before the PendingLogsEvent is processed.
-		cpy := make([]*types.Log, len(coalescedLogs))
-		for i, l := range coalescedLogs {
-			cpy[i] = new(types.Log)
-			*cpy[i] = *l
-		}
-		go func(logs []*types.Log, tcount int) {
-			if len(logs) > 0 {
-				mux.Post(core.PendingLogsEvent{Logs: logs})
+	for _, fruit := range fruits {
+		err, receipts := env.commitFruit(fruit, bc, coinbase)
+		if err == nil {
+			for _, receipt := range receipts {
+				env.receipts = append(env.receipts, receipt)
 			}
-			if tcount > 0 {
-				mux.Post(core.PendingStateEvent{})
-			}
-		}(cpy, env.tcount)
+			env.fruits = append(env.fruits, fruit)
+		}
 	}
-}
 
-func (env *Work) commitTransaction(tx *types.Transaction, bc *core.BlockChain, coinbase common.Address, gp *core.GasPool) (error, []*types.Log) {
-	snap := env.state.Snapshot()
-
-	receipt, _, err := core.ApplyTransaction(env.config, bc, &coinbase, gp, env.state, env.header, tx, &env.header.GasUsed, vm.Config{})
-	if err != nil {
-		env.state.RevertToSnapshot(snap)
-		return err, nil
-	}
-	env.txs = append(env.txs, tx)
-	env.receipts = append(env.receipts, receipt)
-
-	return nil, receipt.Logs
 }

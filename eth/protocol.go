@@ -114,7 +114,7 @@ type txPool interface {
 
 type hybridPool interface {
 	AddRemoteFruits([]*types.Block) []error
-	PendingFruits() (map[common.Hash]types.Block, error)
+	PendingFruits() (map[common.Hash]*types.Block, error)
 	SubscribeNewFruitEvent(chan<- core.NewFruitEvent) event.Subscription
 
 	AddRemoteRecords([]*types.PbftRecord) []error

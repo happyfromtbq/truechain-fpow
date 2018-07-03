@@ -27,7 +27,7 @@ type NewTxsEvent struct{ Txs []*types.Transaction }
 // Neo 20180626 for fruit and record
 type NewFruitEvent struct{ Fruits []*types.Block }
 
-type NewRecordEvent struct{ Records []*types.PbftRecord }
+type NewRecordEvent struct{ Record *types.PbftRecord }
 
 
 
