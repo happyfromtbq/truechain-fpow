@@ -70,7 +70,7 @@ type ProtocolManager struct {
 	acceptTxs uint32 // Flag whether we're considered synchronised (enables transaction processing)
 
 	txpool      txPool
-	hybridpool 	hybridPool
+	hybridpool  hybridPool
 	blockchain  *core.BlockChain
 	chainconfig *params.ChainConfig
 	maxPeers    int
@@ -105,7 +105,7 @@ func NewProtocolManager(config *params.ChainConfig, mode downloader.SyncMode, ne
 		networkId:   networkId,
 		eventMux:    mux,
 		txpool:      txpool,
-		hybridpool:	 hybridpool,
+		hybridpool:  hybridpool,
 		blockchain:  blockchain,
 		chainconfig: config,
 		peers:       newPeerSet(),
@@ -712,7 +712,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			if fruit == nil {
 				return errResp(ErrDecode, "fruit %d is nil", i)
 			}
-			// TODO: 
+			// TODO:
 			p.MarkTransaction(fruit.Hash())
 		}
 		pm.hybridpool.AddRemoteFruits(fruits)

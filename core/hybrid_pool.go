@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"container/list"
-	"os"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
@@ -42,16 +41,19 @@ const (
 	fruitChanSize  = 100
 )
 
+// freshFruitSize is the freshness of fruit according to the paper
+var fruitFreshness *big.Int = big.NewInt(17)
+
 var (
-
-	// freshFruitSize is the freshness of fruit according to the paper
-	freshFruitSize *big.Int = big.NewInt(17)
-
 	// ErrInvalidSender is returned if the transaction contains an invalid signature.
 	ErrInvalidSign = errors.New("invalid sign")
 
-	// ErrNonceTooLow is returned if the nonce of a transaction is lower than the
-	// one present in the local chain.
+	ErrInvalidPointer = errors.New("invalid pointer block")
+
+	ErrExist = errors.New("already exist")
+
+	ErrNotExist = errors.New("not exist")
+
 	ErrInvalidHash = errors.New("invalid hash")
 
 	ErrFreshness = errors.New("fruit not fresh")
@@ -133,9 +135,6 @@ type HybridPool struct {
 	chainHeadCh  chan ChainHeadEvent
 	chainHeadSub event.Subscription
 
-	minedFruitCh  chan NewMinedFruitEvent
-	minedFruitSub event.Subscription
-
 	signer types.Signer
 
 	currentState  *state.StateDB      // Current state in the blockchain head
@@ -148,6 +147,7 @@ type HybridPool struct {
 	muRecord sync.RWMutex
 
 	allRecords    map[common.Hash]*types.PbftRecord
+	fruitRecords  map[common.Hash]*types.PbftRecord // the records have fruit
 	recordList    *list.List
 	recordPending *list.List
 	newRecordCh   chan *types.PbftRecord
@@ -159,7 +159,7 @@ type HybridPool struct {
 
 	header *types.Block
 
-	gasUsed	uint64
+	gasUsed uint64
 	gasPool *GasPool // available gas used to pack transactions
 
 	wg sync.WaitGroup // for shutdown sync
@@ -191,6 +191,7 @@ func NewHybridPool(chainconfig *params.ChainConfig, chain *BlockChain) *HybridPo
 
 		newFruitCh: make(chan *types.Block, fruitChanSize),
 		allFruits:  make(map[common.Hash]*types.Block),
+		fruitPending:make(map[common.Hash]*types.Block),
 	}
 	pool.reset(nil, chain.CurrentBlock())
 
@@ -241,23 +242,25 @@ func (pool *HybridPool) getRecord(hash common.Hash, number *big.Int) *types.Pbft
 	return nil
 }
 
-func (pool *HybridPool) updateFruit(record *types.PbftRecord) {
+// move the fruit of execute record to pending list
+func (pool *HybridPool) updateFruit(record *types.PbftRecord) error {
 	pool.muFruit.Lock()
 	defer pool.muFruit.Unlock()
 
 	f := pool.allFruits[record.Hash()]
 	if f == nil {
-		return
+		return ErrNotExist
 	} else {
 		if f.TxHash() != record.TxHash() {
 			// fruit txs is invalid
 			delete(pool.allFruits, record.Hash())
 			delete(pool.fruitPending, record.Hash())
-			return
+			return ErrInvalidHash
 		} else {
 			pool.fruitPending[record.Hash()] = f
 		}
 	}
+	return nil
 }
 
 // add
@@ -266,22 +269,30 @@ func (pool *HybridPool) addFruit(fruit *types.Block) error {
 	defer pool.muFruit.Unlock()
 
 	//check
-	r := pool.getRecord(fruit.RecordHash(), fruit.Number())
+	r := pool.getRecord(fruit.RecordHash(), fruit.RecordNumber())
 	f := pool.allFruits[fruit.RecordHash()]
 	if f == nil {
 		pool.allFruits[fruit.RecordHash()] = fruit
 		if r != nil {
+			pool.muRecord.Lock()
+			pool.removeRecordWithLock(pool.recordPending, fruit.RecordHash())
+			pool.muRecord.Unlock()
 			pool.fruitPending[fruit.RecordHash()] = fruit
 		}
 
 		return nil
 	} else {
-		if fruit.RecordHash().Big().Cmp(f.RecordHash().Big()) > 0 {
+		if fruit.Hash().Big().Cmp(f.Hash().Big()) > 0 {
 			// new fruit hash is greater than old one
 			return nil
 		} else {
 			pool.allFruits[fruit.RecordHash()] = fruit
 			if r != nil {
+				pool.muRecord.Lock()
+				pool.removeRecordWithLock(pool.recordPending, fruit.RecordHash())
+				pool.muRecord.Unlock()
+				pool.fruitPending[fruit.RecordHash()] = fruit
+			} else if _,ok := pool.fruitPending[fruit.RecordHash()]; ok {
 				pool.fruitPending[fruit.RecordHash()] = fruit
 			}
 		}
@@ -291,11 +302,15 @@ func (pool *HybridPool) addFruit(fruit *types.Block) error {
 }
 
 func (pool *HybridPool) commitTransaction(tx *types.Transaction, coinbase common.Address, gp *GasPool, gasUsed *uint64) (error, *types.Receipt) {
-	snap := pool.currentState.Snapshot()
+	//snap := pool.currentState.Snapshot()
+
+	// TODO: commit tx
+	return nil, nil
 
 	receipt, _, err := ApplyTransaction(pool.chainconfig, pool.chain, &coinbase, gp, pool.currentState, pool.header.Header(), tx, gasUsed, vm.Config{})
 	if err != nil {
-		pool.currentState.RevertToSnapshot(snap)
+		//pool.currentState.RevertToSnapshot(snap)
+		log.Info("apply transaction field ", "err", err.Error())
 		return err, nil
 	}
 
@@ -308,13 +323,14 @@ func (pool *HybridPool) commitRecord(record *types.PbftRecord, coinbase common.A
 	if pool.gasPool == nil {
 		pool.gasPool = new(GasPool).AddGas(pool.header.GasLimit())
 	}
-
 	//return nil, nil
+
+	snap := pool.currentState.Snapshot()
 
 	for _, tx := range record.Transactions() {
 		err, receipt := pool.commitTransaction(tx, coinbase, pool.gasPool, &pool.gasUsed)
-
 		if err != nil {
+			pool.currentState.RevertToSnapshot(snap)
 			return err, nil
 		}
 		receipts = append(receipts, receipt)
@@ -323,6 +339,8 @@ func (pool *HybridPool) commitRecord(record *types.PbftRecord, coinbase common.A
 	return nil, receipts
 }
 
+// re execute records whose number are larger than the give on
+// maybe they can execute now
 func (pool *HybridPool) updateRecordsWithLock(number *big.Int) {
 	// TODO:
 	var remove []*list.Element
@@ -335,10 +353,11 @@ func (pool *HybridPool) updateRecordsWithLock(number *big.Int) {
 		} else {
 			err, _ := pool.commitRecord(r, common.Address{})
 			if err == nil {
-				pool.insertRecordWithLock(pool.recordPending, r)
-				go pool.recordFeed.Send(NewRecordEvent{r})
-
-				pool.updateFruit(r)
+				errf := pool.updateFruit(r)
+				if errf != nil {
+					pool.insertRecordWithLock(pool.recordPending, r)
+					go pool.recordFeed.Send(NewRecordEvent{r})
+				}
 
 				remove = append(remove, lr)
 			} else {
@@ -359,20 +378,21 @@ func (pool *HybridPool) addRecord(record *types.PbftRecord) error {
 	//check
 	f := pool.allRecords[record.Hash()]
 	if f != nil {
-		return os.ErrExist
+		return ErrExist
 	}
 
 	// TODO: execute all the txs in the record
 	err, _ := pool.commitRecord(record, common.Address{})
 	if err != nil {
 		pool.insertRecordWithLock(pool.recordList, record)
-
 	} else {
-		pool.insertRecordWithLock(pool.recordPending, record)
+		err := pool.updateFruit(record)
+		if err != nil {
+			// insert pending list to send to mine
+			pool.insertRecordWithLock(pool.recordPending, record)
+		}
 
 		go pool.recordFeed.Send(NewRecordEvent{record})
-
-		pool.updateFruit(record)
 
 		pool.updateRecordsWithLock(record.Number())
 	}
@@ -412,11 +432,6 @@ func (pool *HybridPool) loop() {
 				head = ev.Block
 
 				pool.mu.Unlock()
-			}
-
-		case ev := <-pool.minedFruitCh:
-			if ev.Block != nil {
-				pool.addFruit(ev.Block)
 			}
 
 		case fruit := <-pool.newFruitCh:
@@ -468,24 +483,23 @@ func fruitsDifference(a, b []*types.Block) []*types.Block {
 	return keep
 }
 
-func (pool *HybridPool) removeRecord(hash common.Hash) {
-	for e := pool.recordList.Front(); e != nil; e = e.Next() {
+// remove the record from pending list and unexecutable list
+func (pool *HybridPool) removeRecordWithLock(recordList *list.List, hash common.Hash) {
+	for e := recordList.Front(); e != nil; e = e.Next() {
 		r := e.Value.(*types.PbftRecord)
 		if r.Hash() == hash {
-			pool.recordList.Remove(e)
+			recordList.Remove(e)
 			break
 		}
 	}
 
-	for e := pool.recordPending.Front(); e != nil; e = e.Next() {
+	for e := recordList.Front(); e != nil; e = e.Next() {
 		r := e.Value.(*types.PbftRecord)
-		if r.Hash() == hash {
-			pool.recordList.Remove(e)
-			break
-		}
+		log.Info("pendinglist", "number", r.Number())
 	}
 }
 
+// remove all the fruits and records included in the new block
 func (pool *HybridPool) remove(fruits []*types.Block) {
 	pool.muFruit.Lock()
 	defer pool.muFruit.Unlock()
@@ -498,7 +512,8 @@ func (pool *HybridPool) remove(fruits []*types.Block) {
 		delete(pool.allFruits, fruit.RecordHash())
 
 		if _, ok := pool.allRecords[fruit.RecordHash()]; ok {
-			pool.removeRecord(fruit.RecordHash())
+			pool.removeRecordWithLock(pool.recordList, fruit.RecordHash())
+			pool.removeRecordWithLock(pool.recordPending, fruit.RecordHash())
 			delete(pool.allRecords, fruit.RecordHash())
 		}
 	}
@@ -656,22 +671,17 @@ func (pool *HybridPool) SubscribeNewFruitEvent(ch chan<- NewFruitEvent) event.Su
 
 // Insert record into list order by record number
 func (pool *HybridPool) insertRecordWithLock(recordList *list.List, record *types.PbftRecord) error {
-	lr := recordList.Front()
 
-	for {
-		if lr == nil {
-			recordList.PushBack(record)
-			return nil
-		}
+	log.Info("++insert record pending", "number", record.Number(), "hash", record.Hash())
+
+	for lr := recordList.Front(); lr != nil; lr = lr.Next() {
 		r := lr.Value.(*types.PbftRecord)
-
 		if r.Number().Cmp(record.Number()) > 0 {
 			recordList.InsertBefore(record, lr)
 			return nil
 		}
-
-		lr = lr.Next()
 	}
+	recordList.PushBack(record)
 
 	return nil
 }
@@ -701,13 +711,12 @@ func (pool *HybridPool) AddRemoteRecords(records []*types.PbftRecord) []error {
 func (pool *HybridPool) PendingRecords() (*types.PbftRecord, error) {
 	pool.muRecord.Lock()
 	defer pool.muRecord.Unlock()
-	//TODO: get the first record in the pool
 
 	first := pool.recordPending.Front()
 	if first == nil {
 		return nil, nil
 	}
-	record := pool.recordPending.Remove(first).(*types.PbftRecord)
+	record := types.CopyRecord(first.Value.(*types.PbftRecord))
 
 	return record, nil
 }
@@ -743,8 +752,12 @@ func (pool *HybridPool) validateFruit(fruit *types.Block) error {
 	// TODO: checks whether the fruit is valid
 
 	// check freshness
-	freshNumber := pool.header.Number().Sub(pool.header.Number(), freshFruitSize)
-	if freshNumber.Cmp(fruit.Number()) > 0 {
+	pointer := pool.chain.GetBlockByHash(fruit.PointerHash())
+	if pointer == nil {
+		return ErrInvalidPointer
+	}
+	freshNumber := pool.header.Number().Sub(pool.header.Number(), pointer.Number())
+	if freshNumber.Cmp(fruitFreshness) > 0 {
 		return ErrFreshness
 	}
 

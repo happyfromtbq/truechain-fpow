@@ -51,15 +51,22 @@ func (r *PbftRecord) CalcHash() common.Hash {
 
 
 func CopyRecord(r *PbftRecord) *PbftRecord {
+	header := *r.header
+	if header.Time = new(big.Int); r.header.Time != nil {
+		header.Time.Set(r.header.Time)
+	}
+	if header.Number = new(big.Int); r.header.Number != nil {
+		header.Number.Set(r.header.Number)
+	}
+	if header.GasLimit = new(big.Int); r.header.GasLimit != nil {
+		header.GasLimit.Set(r.header.GasLimit)
+	}
+	if header.GasUsed = new(big.Int); r.header.GasUsed != nil {
+		header.GasUsed.Set(r.header.GasUsed)
+	}
+
 	record := &PbftRecord{
-		header: &PbftRecordHeader{
-			Number: r.header.Number,
-			Hash:	r.header.Hash,
-			TxHash:	r.header.TxHash,
-			GasLimit: r.header.GasLimit,
-			GasUsed: r.header.GasUsed,
-			Time: 	r.header.Time,
-		},
+		header: &header,
 	}
 
 	if len(r.transactions) != 0 {
