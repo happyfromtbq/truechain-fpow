@@ -354,48 +354,6 @@ func (self *worker) update() {
 	}
 }
 
-func (self *worker) waitfruit(Work *Work) {
-	log.Info("neo get fruit")
-
-	// first check can insit to fruit set
-	/*
-		重复水果检查类似block
-		需要构造 fruit
-		广播
-		被包涵块 放在pool 里面
-		构造fruit 查询 保质期内就放到set里面去
-	*/
-
-	// put it in to fruit pool
-
-	//AppendingFruits
-	//AppendingRecord
-	// 广播
-
-	// Update the block hash in all logs since it is now available and not when the
-	// receipt/log of individual transactions were created.
-
-	// check if canon block and write transactions
-	/*if stat == core.CanonStatTy {
-		// implicit by posting ChainHeadEvent
-		mustCommitNewWork = false
-	}
-
-	// Broadcast the block and announce chain insertion event
-	self.mux.Post(core.NewMinedFruitEvent{Block: work})
-	var (
-		events []interface{}
-		logs   = work.state.Logs()
-	)
-	events = append(events, core.FruitEvent{Block: block, Hash: block.Hash(), Logs: logs})
-	if stat == core.CanonStatTy {
-		events = append(events, core.FruitFleashEvent{Block: block})
-	}
-	self.chain.PostChainEvents(events, logs)
-	*/
-
-}
-
 func (self *worker) wait() {
 	for {
 		mustCommitNewWork := true
@@ -408,24 +366,26 @@ func (self *worker) wait() {
 			}
 
 			block := result.Block
-
 			work := result.Work
 
 			//neo 20180624 that for fruit
-			isFruit := block.Fruit()
-			if isFruit == true {
-
+			if block.IsFruit() {
+				if block.RecordNumber() == nil {
+					// if it does't include a record, it's not a fruit
+					continue
+				}
+				if block.RecordNumber().Cmp(common.Big0) == 0 {
+					continue
+				}
+				log.Info("mined fruit", "record number", block.RecordNumber(), "hash", block.Hash())
 				//neo 20180628
 				// put it into pool first
-				// Broadcast the block and announce chain insertion event
+				// Broadcast the new fruit event
 				self.mux.Post(core.NewMinedFruitEvent{Block: block})
-				var (
-					events []interface{}
-					logs   = work.state.Logs()
-				)
-				events = append(events, core.FruitEvent{Block: block, Hash: block.Hash(), Logs: logs})
 
-				//self.chain.PostChainEvents(events, logs)
+				var newFruits []*types.Block
+				newFruits = append(newFruits, block)
+				self.eth.HybridPool().AddRemoteFruits(newFruits)
 
 			} else {
 				// Update the block hash in all logs since it is now available and not when the
@@ -434,7 +394,6 @@ func (self *worker) wait() {
 					for _, l := range r.Logs {
 						l.BlockHash = block.Hash()
 						// neo add fruit 20180624
-
 					}
 				}
 				for _, log := range work.state.Logs() {
@@ -545,11 +504,12 @@ func (self *worker) commitNewWork() {
 
 	num := parent.Number()
 	header := &types.Header{
-		ParentHash: parent.Hash(),
-		Number:     num.Add(num, common.Big1),
-		GasLimit:   core.CalcGasLimit(parent),
-		Extra:      self.extra,
-		Time:       big.NewInt(tstamp),
+		ParentHash:  parent.Hash(),
+		PointerHash: parent.Hash(),
+		Number:      num.Add(num, common.Big1),
+		GasLimit:    core.CalcGasLimit(parent),
+		Extra:       self.extra,
+		Time:        big.NewInt(tstamp),
 	}
 	// Only set the coinbase if we are mining (avoid spurious block rewards)
 	if atomic.LoadInt32(&self.mining) == 1 {
@@ -591,6 +551,10 @@ func (self *worker) commitNewWork() {
 		for _, tx := range PendingRecord.Transactions() {
 			work.txs = append(work.txs, tx)
 		}
+		work.header.RecordHash = PendingRecord.Hash()
+		work.header.RecordNumber = PendingRecord.Number()
+
+		log.Info("commit record", "number", PendingRecord.Number())
 	}
 
 	PendingFruits, err := self.eth.HybridPool().PendingFruits()
@@ -630,7 +594,7 @@ func (self *worker) commitNewWork() {
 	}
 	// We only care about logging if we're actually mining.
 	if atomic.LoadInt32(&self.mining) == 1 {
-		log.Info("Commit new mining work", "number", work.Block.Number(), "txs", work.tcount, "uncles", len(uncles), "elapsed", common.PrettyDuration(time.Since(tstart)))
+		log.Info("Commit new mining work", "number", work.Block.Number(), "txs", len(work.txs), "uncles", len(uncles), "fruits", len(work.fruits), "elapsed", common.PrettyDuration(time.Since(tstart)))
 		self.unconfirmed.Shift(work.Block.NumberU64() - 1)
 	}
 	self.push(work)
@@ -692,10 +656,13 @@ func (env *Work) commitTransaction(tx *types.Transaction, bc *core.BlockChain, c
 }
 
 func (env *Work) commitFruit(fruit *types.Block, bc *core.BlockChain, coinbase common.Address) (error, []*types.Receipt) {
-
 	var receipts []*types.Receipt
 
-	freshNumber := env.header.Number.Sub(env.header.Number, fruit.Number())
+	pointer := bc.GetBlockByHash(fruit.PointerHash())
+	if pointer == nil {
+		return core.ErrInvalidPointer, nil
+	}
+	freshNumber := env.header.Number.Sub(env.header.Number, pointer.Number())
 	if freshNumber.Cmp(fruitFreshness) > 0 {
 		return core.ErrFreshness, nil
 	}
@@ -716,10 +683,8 @@ func (env *Work) commitFruit(fruit *types.Block, bc *core.BlockChain, coinbase c
 }
 
 func FruitsByNumber(fruits map[common.Hash]*types.Block) []*types.Block {
-
-	fruitset := make([]*types.Block, len(fruits))
-
-	// TODO order by record number
+	var fruitset []*types.Block
+	// TODO: order by record number
 	for _, fruit := range fruits {
 
 		fruitset = append(fruitset, fruit)

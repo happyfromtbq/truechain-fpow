@@ -116,6 +116,7 @@ func (h *Header) HashNoNonce() common.Hash {
 		h.PointerHash,
 		h.FruitsHash,
 		h.RecordHash,
+		h.RecordNumber,
 		h.UncleHash,
 		h.Coinbase,
 		h.Root,
@@ -290,6 +291,9 @@ func CopyHeader(h *Header) *Header {
 	if cpy.Number = new(big.Int); h.Number != nil {
 		cpy.Number.Set(h.Number)
 	}
+	if cpy.RecordNumber = new(big.Int); h.RecordNumber != nil {
+		cpy.RecordNumber.Set(h.RecordNumber)
+	}
 	if len(h.Extra) > 0 {
 		cpy.Extra = make([]byte, len(h.Extra))
 		copy(cpy.Extra, h.Extra)
@@ -362,7 +366,9 @@ func (b *Block) Difficulty() *big.Int { return new(big.Int).Set(b.header.Difficu
 func (b *Block) Time() *big.Int       { return new(big.Int).Set(b.header.Time) }
 
 func (b *Block) RecordHash() common.Hash {return b.header.RecordHash}
-func (b *Block) Fruit() bool			{return b.header.Fruit}
+func (b *Block) RecordNumber() *big.Int {return b.header.RecordNumber}
+func (b *Block) IsFruit() bool           {return b.header.Fruit}
+func (b *Block) PointerHash() common.Hash {return b.header.PointerHash}
 
 func (b *Block) NumberU64() uint64        { return b.header.Number.Uint64() }
 func (b *Block) MixDigest() common.Hash   { return b.header.MixDigest }

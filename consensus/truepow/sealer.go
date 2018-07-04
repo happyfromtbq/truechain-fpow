@@ -147,7 +147,7 @@ mineloop:
 		case result = <-found:
 			// One of the threads found a block or fruit return it
 			send <- result
-			if !result.Fruit() {
+			if !result.IsFruit() {
 				// stop threads when get a block, wait for outside abort when result is fruit
 				//close(abort)
 				pend.Wait()
@@ -233,9 +233,9 @@ search:
 					// Seal and return a block (if still needed)
 					select {
 					case found <- block.WithSeal(header):
-						logger.Trace("Fruit nonce found and reported", "attempts", nonce-seed, "nonce", nonce)
+						logger.Trace("IsFruit nonce found and reported", "attempts", nonce-seed, "nonce", nonce)
 					case <-abort:
-						logger.Trace("Fruit nonce found but discarded", "attempts", nonce-seed, "nonce", nonce)
+						logger.Trace("IsFruit nonce found but discarded", "attempts", nonce-seed, "nonce", nonce)
 					}
 				}
 			}

@@ -43,7 +43,7 @@ func TestTestMode(t *testing.T) {
 			break
 		}
 
-		head.Fruit = block.Fruit()
+		head.Fruit = block.IsFruit()
 		head.Nonce = types.EncodeNonce(block.Nonce())
 		head.MixDigest = block.MixDigest()
 
@@ -52,7 +52,7 @@ func TestTestMode(t *testing.T) {
 			t.Fatalf("unexpected verification error: %v", err)
 		}
 
-		if !block.Fruit() {
+		if !block.IsFruit() {
 			break
 		}
 	}

@@ -102,7 +102,7 @@ out:
 
 func (self *CpuAgent) mine(work *Work, stop <-chan struct{}) {
 	//Neo for test
-	log.Info("start to mine and to be consensus")
+	log.Info("start to mine and to be consensus", " difficulty ", work.header.Difficulty)
 	// the mine with consensus
 
 	// old ethereum code neo 20180624
@@ -135,7 +135,7 @@ func (self *CpuAgent) mine(work *Work, stop <-chan struct{}) {
 			// One of the threads found a block or fruit return it
 			self.returnCh <- &Result{work, result}
 			// when get a fruit, to stop or continue
-			if !result.Fruit() {
+			if !result.IsFruit() {
 				break mineloop
 			}
 			break

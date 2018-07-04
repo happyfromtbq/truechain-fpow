@@ -77,15 +77,23 @@ func (ethash *Truepow) VerifyHeader(chain consensus.ChainReader, header *types.H
 	if ethash.config.PowMode == ModeFullFake {
 		return nil
 	}
+
 	// Short circuit if the header is known, or it's parent not
 	number := header.Number.Uint64()
-	if chain.GetHeader(header.Hash(), number) != nil {
-		return nil
-	}
+
 	parent := chain.GetHeader(header.ParentHash, number-1)
 	if parent == nil {
 		return consensus.ErrUnknownAncestor
 	}
+
+	if header.Fruit {
+		return ethash.verifyHeader(chain, header, parent, false, seal)
+	}
+
+	if chain.GetHeader(header.Hash(), number) != nil {
+		return nil
+	}
+
 	// Sanity checks passed, do a proper verification
 	return ethash.verifyHeader(chain, header, parent, false, seal)
 }
