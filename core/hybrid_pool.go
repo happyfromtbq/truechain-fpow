@@ -492,11 +492,6 @@ func (pool *HybridPool) removeRecordWithLock(recordList *list.List, hash common.
 			break
 		}
 	}
-
-	for e := recordList.Front(); e != nil; e = e.Next() {
-		r := e.Value.(*types.PbftRecord)
-		log.Info("pendinglist", "number", r.Number())
-	}
 }
 
 // remove all the fruits and records included in the new block
