@@ -771,7 +771,8 @@ func (pool *HybridPool) validateFruit(fruit *types.Block) error {
 	if pointer == nil {
 		return ErrInvalidPointer
 	}
-	freshNumber := pool.header.Number().Sub(pool.header.Number(), pointer.Number())
+	//freshNumber := pool.header.Number().Sub(pool.header.Number(), pointer.Number())
+	freshNumber := new(big.Int).Sub(pool.header.Number(), pointer.Number())
 	if freshNumber.Cmp(fruitFreshness) > 0 {
 		return ErrFreshness
 	}
