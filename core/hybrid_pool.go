@@ -243,9 +243,11 @@ func (pool *HybridPool) getRecord(hash common.Hash, number *big.Int) *types.Pbft
 }
 
 // move the fruit of execute record to pending list
-func (pool *HybridPool) updateFruit(record *types.PbftRecord) error {
-	pool.muFruit.Lock()
-	defer pool.muFruit.Unlock()
+func (pool *HybridPool) updateFruit(record *types.PbftRecord, toLock bool) error {
+	if toLock {
+		pool.muFruit.Lock()
+		defer pool.muFruit.Unlock()
+	}
 
 	f := pool.allFruits[record.Hash()]
 	if f == nil {
@@ -305,7 +307,7 @@ func (pool *HybridPool) commitTransaction(tx *types.Transaction, coinbase common
 	//snap := pool.currentState.Snapshot()
 
 	// TODO: commit tx
-	return nil, nil
+	//return nil, nil
 
 	receipt, _, err := ApplyTransaction(pool.chainconfig, pool.chain, &coinbase, gp, pool.currentState, pool.header.Header(), tx, gasUsed, vm.Config{})
 	if err != nil {
@@ -341,7 +343,7 @@ func (pool *HybridPool) commitRecord(record *types.PbftRecord, coinbase common.A
 
 // re execute records whose number are larger than the give on
 // maybe they can execute now
-func (pool *HybridPool) updateRecordsWithLock(number *big.Int) {
+func (pool *HybridPool) updateRecordsWithLock(number *big.Int, lockFruits bool) {
 	// TODO:
 	var remove []*list.Element
 	for lr := pool.recordList.Front(); lr != nil; lr = lr.Next() {
@@ -353,7 +355,7 @@ func (pool *HybridPool) updateRecordsWithLock(number *big.Int) {
 		} else {
 			err, _ := pool.commitRecord(r, common.Address{})
 			if err == nil {
-				errf := pool.updateFruit(r)
+				errf := pool.updateFruit(r, lockFruits)
 				if errf != nil {
 					pool.insertRecordWithLock(pool.recordPending, r)
 					var records []*types.PbftRecord
@@ -383,12 +385,14 @@ func (pool *HybridPool) addRecord(record *types.PbftRecord) error {
 		return ErrExist
 	}
 
+	pool.allRecords[record.Hash()] = record
+
 	// TODO: execute all the txs in the record
 	err, _ := pool.commitRecord(record, common.Address{})
 	if err != nil {
 		pool.insertRecordWithLock(pool.recordList, record)
 	} else {
-		err := pool.updateFruit(record)
+		err := pool.updateFruit(record, true)
 		if err != nil {
 			// insert pending list to send to mine
 			pool.insertRecordWithLock(pool.recordPending, record)
@@ -397,7 +401,7 @@ func (pool *HybridPool) addRecord(record *types.PbftRecord) error {
 		records = append(records, record)
 		go pool.recordFeed.Send(NewRecordsEvent{records})
 
-		pool.updateRecordsWithLock(record.Number())
+		pool.updateRecordsWithLock(record.Number(), true)
 	}
 
 	return nil
@@ -498,13 +502,7 @@ func (pool *HybridPool) removeRecordWithLock(recordList *list.List, hash common.
 }
 
 // remove all the fruits and records included in the new block
-func (pool *HybridPool) remove(fruits []*types.Block) {
-	pool.muFruit.Lock()
-	defer pool.muFruit.Unlock()
-
-	pool.muRecord.Lock()
-	defer pool.muRecord.Unlock()
-
+func (pool *HybridPool) removeWithLock(fruits []*types.Block) {
 	for _, fruit := range fruits {
 		delete(pool.fruitPending, fruit.RecordHash())
 		delete(pool.allFruits, fruit.RecordHash())
@@ -514,6 +512,18 @@ func (pool *HybridPool) remove(fruits []*types.Block) {
 			pool.removeRecordWithLock(pool.recordPending, fruit.RecordHash())
 			delete(pool.allRecords, fruit.RecordHash())
 		}
+	}
+}
+
+
+func (pool *HybridPool) resetRecordsWithLock() {
+	pool.fruitPending = make(map[common.Hash]*types.Block)
+
+	pool.recordList = list.New()
+	pool.recordPending = list.New()
+
+	for _, record := range pool.allRecords {
+		pool.insertRecordWithLock(pool.recordList, record)
 	}
 }
 
@@ -587,11 +597,21 @@ func (pool *HybridPool) reset(oldHead, newHead *types.Block) {
 	// any transactions that have been included in the block or
 	// have been invalidated because of another transaction (e.g.
 	// higher gas price)
-	pool.remove(newHead.Fruits())
+	pool.muFruit.Lock()
+	defer pool.muFruit.Unlock()
+
+	pool.muRecord.Lock()
+	defer pool.muRecord.Unlock()
+
+	pool.removeWithLock(newHead.Fruits())
+
+	// reset pool state by re-verify all the records, including pending records
+	// TODO: reset pool state using pendingState, refer to tx_pool
+	pool.resetRecordsWithLock()
 
 	// Check the queue and move transactions over to the pending if possible
 	// or remove those that have become invalid
-	pool.updateRecordsWithLock(common.Big0)
+	pool.updateRecordsWithLock(common.Big0, false)
 }
 
 // Stop terminates the transaction pool.
