@@ -117,8 +117,8 @@ type worker struct {
 	// neo add to event record and fruit
 	fruitSub  event.Subscription // for fruit
 	recordSub event.Subscription //for record
-	fruitCh   chan core.NewFruitEvent
-	recordCh  chan core.NewRecordEvent
+	fruitCh   chan core.NewFruitsEvent
+	recordCh  chan core.NewRecordsEvent
 
 	txsCh        chan core.NewTxsEvent
 	txsSub       event.Subscription
@@ -164,8 +164,8 @@ func newWorker(config *params.ChainConfig, engine consensus.Engine, coinbase com
 		eth:            eth,
 		mux:            mux,
 		txsCh:          make(chan core.NewTxsEvent, txChanSize),
-		fruitCh:        make(chan core.NewFruitEvent, txChanSize),  //neo 20180626 for fruit
-		recordCh:       make(chan core.NewRecordEvent, txChanSize), //neo 20180626 for record
+		fruitCh:        make(chan core.NewFruitsEvent, txChanSize),  //neo 20180626 for fruit
+		recordCh:       make(chan core.NewRecordsEvent, txChanSize), //neo 20180626 for record
 		chainHeadCh:    make(chan core.ChainHeadEvent, chainHeadChanSize),
 		chainSideCh:    make(chan core.ChainSideEvent, chainSideChanSize),
 		chainDb:        eth.ChainDb(),
@@ -279,7 +279,7 @@ func (self *worker) updateofFruitTx([]*types.Block) {
 }
 
 //Neo 20180626 for record pool event
-func (self *worker) updateofRecordTx(*types.PbftRecord) {
+func (self *worker) updateofRecordTx([]*types.PbftRecord) {
 
 }
 
@@ -340,7 +340,7 @@ func (self *worker) update() {
 			//return
 
 		case ev := <-self.recordCh:
-			self.updateofRecordTx(ev.Record)
+			self.updateofRecordTx(ev.Records)
 
 			//return
 		// System stopped
@@ -410,12 +410,15 @@ func (self *worker) wait() {
 					// implicit by posting ChainHeadEvent
 					mustCommitNewWork = false
 				}
+				// start 这里是广播的地方
 				// Broadcast the block and announce chain insertion event
 				self.mux.Post(core.NewMinedBlockEvent{Block: block})
 				var (
 					events []interface{}
 					logs   = work.state.Logs()
 				)
+
+
 				events = append(events, core.ChainEvent{Block: block, Hash: block.Hash(), Logs: logs})
 				if stat == core.CanonStatTy {
 					events = append(events, core.ChainHeadEvent{Block: block})
@@ -424,7 +427,7 @@ func (self *worker) wait() {
 
 				// Insert the block into the set of pending ones to wait for confirmations
 				self.unconfirmed.Insert(block.NumberU64(), block.Hash())
-
+				// end 这里是广播的地方
 				if mustCommitNewWork {
 					self.commitNewWork()
 				}
@@ -662,9 +665,14 @@ func (env *Work) commitFruit(fruit *types.Block, bc *core.BlockChain, coinbase c
 	if pointer == nil {
 		return core.ErrInvalidPointer, nil
 	}
+<<<<<<< .merge_file_Bn1ewo
 
 	freshNumber := new(big.Int).Sub(env.header.Number, pointer.Number())
 	
+=======
+	//freshNumber := env.header.Number.Sub(env.header.Number, pointer.Number())
+	freshNumber :=new(big.Int).Sub(env.header.Number,pointer.Number())
+>>>>>>> .merge_file_voHJZy
 	if freshNumber.Cmp(fruitFreshness) > 0 {
 		return core.ErrFreshness, nil
 	}

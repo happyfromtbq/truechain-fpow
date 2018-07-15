@@ -49,6 +49,9 @@ const (
 	// txChanSize is the size of channel listening to NewTxsEvent.
 	// The number is referenced from the size of tx pool.
 	txChanSize = 4096
+	//record
+	recordChanSize = 256
+	fruitChanSize = 256
 )
 
 var (
@@ -72,6 +75,8 @@ type ProtocolManager struct {
 	txpool      txPool
 	hybridpool  hybridPool
 	blockchain  *core.BlockChain
+	//added by Abition 20180715
+	fruitchain  *core.BlockChain
 	chainconfig *params.ChainConfig
 	maxPeers    int
 
@@ -84,7 +89,16 @@ type ProtocolManager struct {
 	eventMux      *event.TypeMux
 	txsCh         chan core.NewTxsEvent
 	txsSub        event.Subscription
+	//records
+	recordsch      chan core.NewRecordsEvent
+	recordsSub	  event.Subscription
+	//fruit
+	fruitsch       chan core.NewFruitsEvent
+	fruitsSub	  event.Subscription
+
 	minedBlockSub *event.TypeMuxSubscription
+    //fruit
+	minedFruitSub *event.TypeMuxSubscription
 
 	// channels for fetcher, syncer, txsyncLoop
 	newPeerCh   chan *peer
@@ -210,9 +224,23 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 	pm.txsSub = pm.txpool.SubscribeNewTxsEvent(pm.txsCh)
 	go pm.txBroadcastLoop()
 
+	//broadcast records
+	pm.recordsch = make(chan core.NewRecordsEvent, recordChanSize)
+	pm.recordsSub = pm.hybridpool.SubscribeNewRecordEvent(pm.recordsch)
+	go pm.recordBroadcastLoop()
+
+	//broadcast fruits
+	pm.fruitsch = make(chan core.NewFruitsEvent, fruitChanSize)
+	pm.fruitsSub = pm.hybridpool.SubscribeNewFruitEvent(pm.fruitsch)
+	go pm.fruitBroadcastLoop()
+
 	// broadcast mined blocks
 	pm.minedBlockSub = pm.eventMux.Subscribe(core.NewMinedBlockEvent{})
 	go pm.minedBroadcastLoop()
+
+	// broadcast mined fruits
+	pm.minedFruitSub = pm.eventMux.Subscribe(core.NewMinedFruitEvent{})
+	go pm.minedFruitLoop()
 
 	// start sync handlers
 	go pm.syncer()
@@ -224,7 +252,10 @@ func (pm *ProtocolManager) Stop() {
 
 	pm.txsSub.Unsubscribe()        // quits txBroadcastLoop
 	pm.minedBlockSub.Unsubscribe() // quits blockBroadcastLoop
-
+	//fruit and record and minedfruit
+	pm.recordsSub.Unsubscribe()    //quits recordBroadcastLoop
+	pm.fruitsSub.Unsubscribe() // quits fruitBroadcastLoop
+	pm.minedFruitSub.Unsubscribe() // quits minedfruitBroadcastLoop
 	// Quit the sync loop.
 	// After this send has completed, no new peers will be accepted.
 	pm.noMorePeers <- struct{}{}
@@ -756,6 +787,40 @@ func (pm *ProtocolManager) BroadcastBlock(block *types.Block, propagate bool) {
 	}
 }
 
+// Addead by Abtion,BroadcastFruit will either propagate a fruit to a subset of it's peers, or
+// will only announce it's availability (depending what's requested).
+func (pm *ProtocolManager) BroadcastFruit(fruit *types.Block, propagate bool) {
+	hash := fruit.Hash()
+	peers := pm.peers.PeersWithoutFruit(hash)
+
+	// If propagation is requested, send to a subset of the peer
+	if propagate {
+		// Calculate the TD of the fruit (it's not imported yet, so fruit.Td is not valid)
+		var td *big.Int
+		if parent := pm.fruitchain.GetBlock(fruit.ParentHash(), fruit.NumberU64()-1); parent != nil {
+			td = new(big.Int).Add(fruit.Difficulty(), pm.blockchain.GetTd(fruit.ParentHash(), fruit.NumberU64()-1))
+		} else {
+			log.Error("Propagating dangling fruit", "number", fruit.Number(), "hash", hash)
+			return
+		}
+		// Send the fruit to a subset of our peers
+		transfer := peers[:int(math.Sqrt(float64(len(peers))))]
+		for _, peer := range transfer {
+			peer.AsyncSendNewFruit(fruit, td)
+		}
+		log.Trace("Propagated fruit", "hash", hash, "recipients", len(transfer), "duration", common.PrettyDuration(time.Since(fruit.ReceivedAt)))
+		return
+	}
+	//fruit not exist the follow situation
+	/*// Otherwise if the block is indeed in out own chain, announce it
+	if pm.blockchain.HasBlock(hash, fruit.NumberU64()) {
+		for _, peer := range peers {
+			peer.AsyncSendNewBlockHash(block)
+		}
+		log.Trace("Announced block", "hash", hash, "recipients", len(peers), "duration", common.PrettyDuration(time.Since(block.ReceivedAt)))
+	}*/
+}
+
 // BroadcastTxs will propagate a batch of transactions to all peers which are not known to
 // already have the given transaction.
 func (pm *ProtocolManager) BroadcastTxs(txs types.Transactions) {
@@ -774,7 +839,40 @@ func (pm *ProtocolManager) BroadcastTxs(txs types.Transactions) {
 		peer.AsyncSendTransactions(txs)
 	}
 }
+//for records
+func (pm *ProtocolManager) BroadcastRecords(records types.PbftRecords) {
+	var recordset = make(map[*peer]types.PbftRecords)
 
+	// Broadcast records to a batch of peers not knowing about it
+	for _, record := range records {
+		peers := pm.peers.PeersWithoutRecord(record.Hash())
+		for _, peer := range peers {
+			recordset[peer] = append(recordset[peer], record)
+		}
+		log.Trace("Broadcast records", "hash", record.Hash(), "recipients", len(peers))
+	}
+	// FIXME include this again: peers = peers[:int(math.Sqrt(float64(len(peers))))]
+	for peer, records := range recordset {
+		peer.AsyncSendRecords(records)
+	}
+}
+//for fruits
+func (pm *ProtocolManager) BroadcastFruits(fruits types.Fruits) {
+	var fruitset = make(map[*peer]types.Fruits)
+
+	// Broadcast records to a batch of peers not knowing about it
+	for _, fruit := range fruits {
+		peers := pm.peers.PeersWithoutFruit(fruit.Hash())
+		for _, peer := range peers {
+			fruitset[peer] = append(fruitset[peer], fruit)
+		}
+		log.Trace("Broadcast fruits", "hash", fruit.Hash(), "recipients", len(peers))
+	}
+	// FIXME include this again: peers = peers[:int(math.Sqrt(float64(len(peers))))]
+	for peer, fruits := range fruitset {
+		peer.AsyncSendFruits(fruits)
+	}
+}
 // Mined broadcast loop
 func (pm *ProtocolManager) minedBroadcastLoop() {
 	// automatically stops if unsubscribe
@@ -786,7 +884,17 @@ func (pm *ProtocolManager) minedBroadcastLoop() {
 		}
 	}
 }
-
+// Mined fruit loop
+func (pm *ProtocolManager) minedFruitLoop() {
+	// automatically stops if unsubscribe
+	for obj := range pm.minedFruitSub.Chan() {
+		switch ev := obj.Data.(type) {
+		case core.NewMinedFruitEvent:
+			pm.BroadcastFruit(ev.Block, true)  // First propagate block to peers
+			pm.BroadcastFruit(ev.Block, false) // Only then announce to the rest
+		}
+	}
+}
 func (pm *ProtocolManager) txBroadcastLoop() {
 	for {
 		select {
@@ -800,6 +908,33 @@ func (pm *ProtocolManager) txBroadcastLoop() {
 	}
 }
 
+//  record
+func (pm *ProtocolManager) recordBroadcastLoop() {
+	for {
+		select {
+		case event := <-pm.recordsch:
+			pm.BroadcastRecords(event.Records)
+
+			// Err() channel will be closed when unsubscribing.
+		case <-pm.recordsSub.Err():
+			return
+		}
+	}
+}
+
+//  fruits
+func (pm *ProtocolManager) fruitBroadcastLoop() {
+	for {
+		select {
+		case event := <-pm.fruitsch:
+			pm.BroadcastFruits(event.Fruits)
+
+			// Err() channel will be closed when unsubscribing.
+		case <-pm.fruitsSub.Err():
+			return
+		}
+	}
+}
 // NodeInfo represents a short summary of the Ethereum sub-protocol metadata
 // known about the host peer.
 type NodeInfo struct {

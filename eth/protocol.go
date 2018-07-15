@@ -109,17 +109,20 @@ type txPool interface {
 	// SubscribeNewTxsEvent should return an event subscription of
 	// NewTxsEvent and send events to the given channel.
 	SubscribeNewTxsEvent(chan<- core.NewTxsEvent) event.Subscription
+	// Abtion 20180715 for fruits and records
+	//SubscribeNewRecordsEvent(chan<- core.NewRecordsEvent) event.Subscription
+	//SubscribeNewFruitsEvent(chan<- core.NewFruitsEvent) event.Subscription
 }
 
 
 type hybridPool interface {
 	AddRemoteFruits([]*types.Block) []error
 	PendingFruits() (map[common.Hash]*types.Block, error)
-	SubscribeNewFruitEvent(chan<- core.NewFruitEvent) event.Subscription
+	SubscribeNewFruitEvent(chan<- core.NewFruitsEvent) event.Subscription
 
 	AddRemoteRecords([]*types.PbftRecord) []error
 	PendingRecords() (*types.PbftRecord, error)
-	SubscribeNewRecordEvent(chan<- core.NewRecordEvent) event.Subscription
+	SubscribeNewRecordEvent(chan<- core.NewRecordsEvent) event.Subscription
 }
 
 // statusData is the network packet for the status message.

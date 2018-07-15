@@ -22,7 +22,8 @@ type PbftRecord struct {
 	transactions Transactions
 	sig          []*string
 }
-
+// Abtion 20180715 for handler.go and peer.go
+type PbftRecords []*PbftRecord
 
 func (r *PbftRecord) Hash() common.Hash {
 	return r.header.Hash
