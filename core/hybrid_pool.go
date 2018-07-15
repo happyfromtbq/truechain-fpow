@@ -356,7 +356,9 @@ func (pool *HybridPool) updateRecordsWithLock(number *big.Int) {
 				errf := pool.updateFruit(r)
 				if errf != nil {
 					pool.insertRecordWithLock(pool.recordPending, r)
-					go pool.recordFeed.Send(NewRecordEvent{r})
+					var records []*types.PbftRecord
+					records = append(records, r)
+					go pool.recordFeed.Send(NewRecordsEvent{records})
 				}
 
 				remove = append(remove, lr)
@@ -391,8 +393,9 @@ func (pool *HybridPool) addRecord(record *types.PbftRecord) error {
 			// insert pending list to send to mine
 			pool.insertRecordWithLock(pool.recordPending, record)
 		}
-
-		go pool.recordFeed.Send(NewRecordEvent{record})
+        var records []*types.PbftRecord
+		records = append(records, record)
+		go pool.recordFeed.Send(NewRecordsEvent{records})
 
 		pool.updateRecordsWithLock(record.Number())
 	}
@@ -660,7 +663,7 @@ func (pool *HybridPool) PendingFruits() (map[common.Hash]*types.Block, error) {
 
 // SubscribeNewFruitsEvent registers a subscription of NewFruitEvent and
 // starts sending event to the given channel.
-func (pool *HybridPool) SubscribeNewFruitEvent(ch chan<- NewFruitEvent) event.Subscription {
+func (pool *HybridPool) SubscribeNewFruitEvent(ch chan<- NewFruitsEvent) event.Subscription {
 	return pool.scope.Track(pool.fruitFeed.Subscribe(ch))
 }
 
@@ -718,7 +721,7 @@ func (pool *HybridPool) PendingRecords() (*types.PbftRecord, error) {
 
 // SubscribeNewRecordsEvent registers a subscription of NewRecordEvent and
 // starts sending event to the given channel.
-func (pool *HybridPool) SubscribeNewRecordEvent(ch chan<- NewRecordEvent) event.Subscription {
+func (pool *HybridPool) SubscribeNewRecordEvent(ch chan<- NewRecordsEvent) event.Subscription {
 	return pool.scope.Track(pool.recordFeed.Subscribe(ch))
 }
 
@@ -751,7 +754,8 @@ func (pool *HybridPool) validateFruit(fruit *types.Block) error {
 	if pointer == nil {
 		return ErrInvalidPointer
 	}
-	freshNumber := pool.header.Number().Sub(pool.header.Number(), pointer.Number())
+	//freshNumber := pool.header.Number().Sub(pool.header.Number(), pointer.Number())
+	freshNumber :=new(big.Int).Sub(pool.header.Number(),pointer.Number())
 	if freshNumber.Cmp(fruitFreshness) > 0 {
 		return ErrFreshness
 	}

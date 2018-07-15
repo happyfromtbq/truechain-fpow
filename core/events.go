@@ -24,10 +24,10 @@ import (
 // NewTxsEvent is posted when a batch of transactions enter the transaction pool.
 type NewTxsEvent struct{ Txs []*types.Transaction }
 
-// Neo 20180626 for fruit and record
-type NewFruitEvent struct{ Fruits []*types.Block }
-
-type NewRecordEvent struct{ Record *types.PbftRecord }
+// Neo 20180626 for fruit and record;Abtion 20180715 motify Neo's NewFruitEvent to NewFruitsEvent
+type NewFruitsEvent struct{ Fruits []*types.Block }
+//Abtion 20180715 motify Neo's NewRecordEvent to NewRecordsEvent
+type NewRecordsEvent struct{ Records []*types.PbftRecord }
 
 
 

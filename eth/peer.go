@@ -72,6 +72,12 @@ type propEvent struct {
 	td    *big.Int
 }
 
+// propEvent is a fruit propagation, waiting for its turn in the broadcast queue.
+type fruitEvent struct {
+	block *types.Block
+	td    *big.Int
+}
+
 type peer struct {
 	id string
 
@@ -86,9 +92,16 @@ type peer struct {
 	lock sync.RWMutex
 
 	knownTxs    *set.Set                  // Set of transaction hashes known to be known by this peer
+	knownRecords    *set.Set              // Set of records hashes known to be known by this peer
+	knownFruits    *set.Set              // Set of fruits hashes known to be known by this peer
 	knownBlocks *set.Set                  // Set of block hashes known to be known by this peer
 	queuedTxs   chan []*types.Transaction // Queue of transactions to broadcast to the peer
+	queuedRecords   chan []*types.PbftRecord // Queue of records to broadcast to the peer
+	queuedFruits   chan []*types.Block // Queue of fruits to broadcast to the peer
 	queuedProps chan *propEvent           // Queue of blocks to broadcast to the peer
+
+	queuedFruit chan *fruitEvent           // Queue of newFruits to broadcast to the peer
+
 	queuedAnns  chan *types.Block         // Queue of blocks to announce to the peer
 	term        chan struct{}             // Termination channel to stop the broadcaster
 }
@@ -119,6 +132,27 @@ func (p *peer) broadcast() {
 				return
 			}
 			p.Log().Trace("Broadcast transactions", "count", len(txs))
+
+        //add for record
+		case records := <-p.queuedRecords:
+			if err := p.Sendrecords(records); err != nil {
+				return
+			}
+			p.Log().Trace("Broadcast records", "count", len(records))
+
+		//add for fruit
+		case fruits := <-p.queuedFruits:
+			if err := p.Sendfruits(fruits); err != nil {
+				return
+			}
+			p.Log().Trace("Broadcast fruits", "count", len(fruits))
+
+		//add for mined fruit
+		case fruit := <-p.queuedFruit:
+			if err := p.SendNewFruit(fruit.block, fruit.td); err != nil {
+				return
+			}
+			p.Log().Trace("Propagated fruit", "number", fruit.block.Number(), "hash", fruit.block.Hash(), "td", fruit.td)
 
 		case prop := <-p.queuedProps:
 			if err := p.SendNewBlock(prop.block, prop.td); err != nil {
@@ -215,6 +249,48 @@ func (p *peer) AsyncSendTransactions(txs []*types.Transaction) {
 	}
 }
 
+//Abtion added 20180715; Sendrecords sends records to the peer and includes the hashes
+// in its record hash set for future reference.
+func (p *peer) Sendrecords(records types.PbftRecords) error {
+	for _, record := range records {
+		p.knownRecords.Add(record.Hash())
+	}
+	return p2p.Send(p.rw, RecordMsg, records)
+}
+
+//Abtion 20180715 for record;the same as transactions
+func (p *peer) AsyncSendRecords(records []*types.PbftRecord) {
+	select {
+	case p.queuedRecords <- records:
+		for _, record := range records {
+			p.knownRecords.Add(record.Hash())
+		}
+	default:
+		p.Log().Debug("Dropping records propagation", "count", len(records))
+	}
+}
+
+//Abtion added 20180715; Sendfruits sends fruits to the peer and includes the hashes
+// in its fruit hash set for future reference.
+func (p *peer) Sendfruits(fruits types.Fruits) error {
+	for _, fruit := range fruits {
+		p.knownFruits.Add(fruit.Hash())
+	}
+	return p2p.Send(p.rw, FruitMsg, fruits)
+}
+
+//Abtion 20180715 for record;the same as transactions
+func (p *peer) AsyncSendFruits(fruits []*types.Block) {
+	select {
+	case p.queuedFruits <- fruits:
+		for _, fruit := range fruits {
+			p.knownFruits.Add(fruit.Hash())
+		}
+	default:
+		p.Log().Debug("Dropping records propagation", "count", len(fruits))
+	}
+}
+
 // SendNewBlockHashes announces the availability of a number of blocks through
 // a hash notification.
 func (p *peer) SendNewBlockHashes(hashes []common.Hash, numbers []uint64) error {
@@ -255,6 +331,23 @@ func (p *peer) AsyncSendNewBlock(block *types.Block, td *big.Int) {
 		p.knownBlocks.Add(block.Hash())
 	default:
 		p.Log().Debug("Dropping block propagation", "number", block.NumberU64(), "hash", block.Hash())
+	}
+}
+
+// SendNewFruit propagates an entire fruit to a remote peer.
+func (p *peer) SendNewFruit(fruit *types.Block, td *big.Int) error {
+	p.knownFruits.Add(fruit.Hash())
+	return p2p.Send(p.rw, FruitMsg, []interface{}{fruit, td})
+}
+
+// AsyncSendNewFruit queues an entire fruit for propagation to a remote peer. If
+// the peer's broadcast queue is full, the event is silently dropped.
+func (p *peer) AsyncSendNewFruit(fruit *types.Block, td *big.Int) {
+	select {
+	case p.queuedFruit <- &fruitEvent{block: fruit, td: td}:
+		p.knownFruits.Add(fruit.Hash())
+	default:
+		p.Log().Debug("Dropping block propagation", "number", fruit.NumberU64(), "hash", fruit.Hash())
 	}
 }
 
@@ -486,6 +579,36 @@ func (ps *peerSet) PeersWithoutTx(hash common.Hash) []*peer {
 	list := make([]*peer, 0, len(ps.peers))
 	for _, p := range ps.peers {
 		if !p.knownTxs.Has(hash) {
+			list = append(list, p)
+		}
+	}
+	return list
+}
+
+// PeersWithoutRecord retrieves a list of peers that do not have a given records
+// in their set of known hashes. added by Abition 20180715
+func (ps *peerSet) PeersWithoutRecord(hash common.Hash) []*peer {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+
+	list := make([]*peer, 0, len(ps.peers))
+	for _, p := range ps.peers {
+		if !p.knownRecords.Has(hash) {
+			list = append(list, p)
+		}
+	}
+	return list
+}
+
+// PeersWithoutFruit retrieves a list of peers that do not have a given fruits
+// in their set of known hashes.
+func (ps *peerSet) PeersWithoutFruit(hash common.Hash) []*peer {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+
+	list := make([]*peer, 0, len(ps.peers))
+	for _, p := range ps.peers {
+		if !p.knownFruits.Has(hash) {
 			list = append(list, p)
 		}
 	}
