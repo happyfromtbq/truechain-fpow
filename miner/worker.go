@@ -377,7 +377,7 @@ func (self *worker) wait() {
 				if block.RecordNumber().Cmp(common.Big0) == 0 {
 					continue
 				}
-				log.Info("mined fruit", "record number", block.RecordNumber(), "hash", block.Hash())
+				//log.Info("mined fruit", "record number", block.RecordNumber(), "hash", block.Hash())
 				//neo 20180628
 				// put it into pool first
 				// Broadcast the new fruit event
@@ -665,8 +665,14 @@ func (env *Work) commitFruit(fruit *types.Block, bc *core.BlockChain, coinbase c
 	if pointer == nil {
 		return core.ErrInvalidPointer, nil
 	}
+<<<<<<< .merge_file_Bn1ewo
+
+	freshNumber := new(big.Int).Sub(env.header.Number, pointer.Number())
+	
+=======
 	//freshNumber := env.header.Number.Sub(env.header.Number, pointer.Number())
 	freshNumber :=new(big.Int).Sub(env.header.Number,pointer.Number())
+>>>>>>> .merge_file_voHJZy
 	if freshNumber.Cmp(fruitFreshness) > 0 {
 		return core.ErrFreshness, nil
 	}
@@ -693,6 +699,20 @@ func FruitsByNumber(fruits map[common.Hash]*types.Block) []*types.Block {
 
 		fruitset = append(fruitset, fruit)
 	}
+	
+	lenfruits := len(fruitset)
+	for i :=0; i<lenfruits; i++{
+		mixRecordNumberIdx := i
+		for j :=i+1; j<lenfruits; j++{
+			if fruitset[j].RecordNumber().Uint64() < fruitset[mixRecordNumberIdx].RecordNumber().Uint64(){
+				mixRecordNumberIdx =  j
+			}
+		}
+		tempfruit := fruitset[i]
+		fruitset[i] =fruitset[mixRecordNumberIdx]
+		fruitset[mixRecordNumberIdx] = tempfruit
+	}
+
 
 	return fruitset
 }
