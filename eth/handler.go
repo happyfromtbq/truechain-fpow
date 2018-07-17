@@ -797,12 +797,12 @@ func (pm *ProtocolManager) BroadcastFruit(fruit *types.Block, propagate bool) {
 	if propagate {
 		// Calculate the TD of the fruit (it's not imported yet, so fruit.Td is not valid)
 		var td *big.Int
-		if parent := pm.fruitchain.GetBlock(fruit.ParentHash(), fruit.NumberU64()-1); parent != nil {
+		/*if parent := pm.fruitchain.GetBlock(fruit.ParentHash(), fruit.NumberU64()-1); parent != nil {
 			td = new(big.Int).Add(fruit.Difficulty(), pm.blockchain.GetTd(fruit.ParentHash(), fruit.NumberU64()-1))
 		} else {
 			log.Error("Propagating dangling fruit", "number", fruit.Number(), "hash", hash)
 			return
-		}
+		}*/
 		// Send the fruit to a subset of our peers
 		transfer := peers[:int(math.Sqrt(float64(len(peers))))]
 		for _, peer := range transfer {
