@@ -377,7 +377,7 @@ func (self *worker) wait() {
 				if block.RecordNumber().Cmp(common.Big0) == 0 {
 					continue
 				}
-				log.Info("mined fruit", "record number", block.RecordNumber(), "hash", block.Hash())
+				log.Info("mined fruit", "fruit number", block.RecordNumber(), "hash", block.Hash())
 				//neo 20180628
 				// put it into pool first
 				// Broadcast the new fruit event
