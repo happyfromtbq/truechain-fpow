@@ -723,7 +723,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 				return errResp(ErrDecode, "transaction %d is nil", i)
 			}
 			// TODO: add markrecord
-			//p.MarkTransaction(tx.Hash())
+			p.MarkRecord(record.Hash())
 		}
 		pm.hybridpool.AddRemoteRecords(records)
 
@@ -744,7 +744,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 				return errResp(ErrDecode, "fruit %d is nil", i)
 			}
 			// TODO:
-			p.MarkTransaction(fruit.Hash())
+			p.MarkFruit(fruit.Hash())
 		}
 		pm.hybridpool.AddRemoteFruits(fruits)
 

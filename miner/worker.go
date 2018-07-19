@@ -665,14 +665,9 @@ func (env *Work) commitFruit(fruit *types.Block, bc *core.BlockChain, coinbase c
 	if pointer == nil {
 		return core.ErrInvalidPointer, nil
 	}
-<<<<<<< .merge_file_Bn1ewo
 
 	freshNumber := new(big.Int).Sub(env.header.Number, pointer.Number())
-	
-=======
-	//freshNumber := env.header.Number.Sub(env.header.Number, pointer.Number())
-	freshNumber :=new(big.Int).Sub(env.header.Number,pointer.Number())
->>>>>>> .merge_file_voHJZy
+
 	if freshNumber.Cmp(fruitFreshness) > 0 {
 		return core.ErrFreshness, nil
 	}

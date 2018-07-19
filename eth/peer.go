@@ -38,13 +38,20 @@ var (
 
 const (
 	maxKnownTxs    = 32768 // Maximum transactions hashes to keep in the known list (prevent DOS)
+	maxKnownRecords    = 1024 // Maximum records hashes to keep in the known list (prevent DOS)
+	maxKnownFruits    = 1024 // Maximum records hashes to keep in the known list (prevent DOS)
 	maxKnownBlocks = 1024  // Maximum block hashes to keep in the known list (prevent DOS)
 
 	// maxQueuedTxs is the maximum number of transaction lists to queue up before
 	// dropping broadcasts. This is a sensitive number as a transaction list might
 	// contain a single transaction, or thousands.
 	maxQueuedTxs = 128
-
+	// contain a single transaction, or thousands.
+	maxQueuedRecords = 128
+	// contain a single transaction, or thousands.
+	maxQueuedFruits = 128
+	//for fruitEvent
+	maxQueuedFruit = 4
 	// maxQueuedProps is the maximum number of block propagations to queue up before
 	// dropping broadcasts. There's not much point in queueing stale blocks, so a few
 	// that might cover uncles should be enough.
@@ -114,9 +121,17 @@ func newPeer(version int, p *p2p.Peer, rw p2p.MsgReadWriter) *peer {
 		id:          fmt.Sprintf("%x", p.ID().Bytes()[:8]),
 		knownTxs:    set.New(),
 		knownBlocks: set.New(),
+
+		knownRecords:    set.New(),
+		knownFruits: set.New(),
+
 		queuedTxs:   make(chan []*types.Transaction, maxQueuedTxs),
 		queuedProps: make(chan *propEvent, maxQueuedProps),
 		queuedAnns:  make(chan *types.Block, maxQueuedAnns),
+
+		queuedRecords:   make(chan []*types.PbftRecord, maxQueuedRecords),
+		queuedFruit: make(chan *fruitEvent, maxQueuedFruit),
+		queuedFruits:  make(chan []*types.Block, maxQueuedFruits),
 		term:        make(chan struct{}),
 	}
 }
@@ -226,7 +241,24 @@ func (p *peer) MarkTransaction(hash common.Hash) {
 	}
 	p.knownTxs.Add(hash)
 }
-
+// MarkRecord marks a record as known for the peer, ensuring that it
+// will never be propagated to this particular peer.
+func (p *peer) MarkRecord(hash common.Hash) {
+	// If we reached the memory allowance, drop a previously known transaction hash
+	for p.knownRecords.Size() >= maxKnownRecords {
+		p.knownRecords.Pop()
+	}
+	p.knownRecords.Add(hash)
+}
+// MarkFruit marks a fruit as known for the peer, ensuring that it
+// will never be propagated to this particular peer.
+func (p *peer) MarkFruit(hash common.Hash) {
+	// If we reached the memory allowance, drop a previously known transaction hash
+	for p.knownFruits.Size() >= maxKnownFruits {
+		p.knownFruits.Pop()
+	}
+	p.knownFruits.Add(hash)
+}
 // SendTransactions sends transactions to the peer and includes the hashes
 // in its transaction hash set for future reference.
 func (p *peer) SendTransactions(txs types.Transactions) error {
