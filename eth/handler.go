@@ -890,7 +890,7 @@ func (pm *ProtocolManager) minedFruitLoop() {
 	for obj := range pm.minedFruitSub.Chan() {
 		switch ev := obj.Data.(type) {
 		case core.NewMinedFruitEvent:
-			pm.BroadcastFruit(ev.Block, true)  // First propagate block to peers
+			pm.BroadcastFruit(ev.Block, true)  // First propagate fruit to peers
 			pm.BroadcastFruit(ev.Block, false) // Only then announce to the rest
 		}
 	}
